@@ -71,29 +71,34 @@
       </link>
     </model>
 
-    <!-- GREEN BELT FEEDER CONVEYOR -->
+    <!-- GREEN BELT FEEDER CONVEYOR (yaw +90deg so +X TrackController moves along +Y) -->
     <model name="conveyor_feeder">
       <static>true</static>
-      <pose>0.45 -0.625 0.725 0 0 0</pose>
+      <pose>0.45 -0.625 0.725 0 0 1.57079632679</pose>
       <link name="conveyor_link">
         <collision name="belt_col">
-          <geometry><box><size>0.40 0.65 0.050</size></box></geometry>
-          <surface><friction><ode><mu>1.5</mu><mu2>1.5</mu2></ode></friction></surface>
+          <geometry><box><size>0.65 0.40 0.050</size></box></geometry>
+          <surface><friction><ode><mu>0.7</mu><mu2>150</mu2><fdir1>0 1 0</fdir1></ode></friction></surface>
         </collision>
         <visual name="belt_vis">
-          <geometry><box><size>0.36 0.65 0.050</size></box></geometry>
+          <geometry><box><size>0.65 0.36 0.050</size></box></geometry>
           <material><ambient>0.04 0.16 0.09 1</ambient><diffuse>0.06 0.22 0.12 1</diffuse></material>
         </visual>
-        <visual name="side_rail_l"><pose>-0.19 0 0 0 0 0</pose><geometry><box><size>0.02 0.65 0.056</size></box></geometry><material><ambient>0.5 0.53 0.57 1</ambient><diffuse>0.68 0.71 0.75 1</diffuse></material></visual>
-        <visual name="side_rail_r"><pose>0.19 0 0 0 0 0</pose><geometry><box><size>0.02 0.65 0.056</size></box></geometry><material><ambient>0.5 0.53 0.57 1</ambient><diffuse>0.68 0.71 0.75 1</diffuse></material></visual>
-        <visual name="drive_motor"><pose>0 -0.26 -0.065 0 1.5708 0</pose><geometry><cylinder><radius>0.04</radius><length>0.16</length></cylinder></geometry><material><ambient>0.15 0.15 0.18 1</ambient><diffuse>0.22 0.22 0.26 1</diffuse></material></visual>
-        <visual name="conv_leg_1"><pose>0.18 -0.28 -0.36 0 0 0</pose><geometry><box><size>0.04 0.04 0.69</size></box></geometry><material><ambient>0.5 0.53 0.57 1</ambient><diffuse>0.68 0.71 0.75 1</diffuse></material></visual>
-        <visual name="conv_leg_2"><pose>-0.18 -0.28 -0.36 0 0 0</pose><geometry><box><size>0.04 0.04 0.69</size></box></geometry><material><ambient>0.5 0.53 0.57 1</ambient><diffuse>0.68 0.71 0.75 1</diffuse></material></visual>
-        <visual name="scan_front"><pose>0 0.330 0.0255 0 0 0</pose><geometry><box><size>0.36 0.010 0.0015</size></box></geometry><material><ambient>0.1 0.85 1.0 1</ambient><diffuse>0.2 0.92 1.0 1</diffuse></material></visual>
-        <visual name="scan_back"><pose>0 0.130 0.0255 0 0 0</pose><geometry><box><size>0.36 0.012 0.0015</size></box></geometry><material><ambient>0.1 0.85 1.0 1</ambient><diffuse>0.2 0.92 1.0 1</diffuse></material></visual>
-        <visual name="scan_left"><pose>-0.175 0.230 0.0255 0 0 0</pose><geometry><box><size>0.008 0.205 0.0015</size></box></geometry><material><ambient>0.1 0.85 1.0 1</ambient><diffuse>0.2 0.92 1.0 1</diffuse></material></visual>
-        <visual name="scan_right"><pose>0.175 0.230 0.0255 0 0 0</pose><geometry><box><size>0.008 0.205 0.0015</size></box></geometry><material><ambient>0.1 0.85 1.0 1</ambient><diffuse>0.2 0.92 1.0 1</diffuse></material></visual>
+        <visual name="side_rail_l"><pose>0 0.19 0 0 0 0</pose><geometry><box><size>0.65 0.02 0.056</size></box></geometry><material><ambient>0.5 0.53 0.57 1</ambient><diffuse>0.68 0.71 0.75 1</diffuse></material></visual>
+        <visual name="side_rail_r"><pose>0 -0.19 0 0 0 0</pose><geometry><box><size>0.65 0.02 0.056</size></box></geometry><material><ambient>0.5 0.53 0.57 1</ambient><diffuse>0.68 0.71 0.75 1</diffuse></material></visual>
+        <visual name="drive_motor"><pose>-0.26 0 -0.065 1.5708 0 0</pose><geometry><cylinder><radius>0.04</radius><length>0.16</length></cylinder></geometry><material><ambient>0.15 0.15 0.18 1</ambient><diffuse>0.22 0.22 0.26 1</diffuse></material></visual>
+        <visual name="conv_leg_1"><pose>-0.28 -0.18 -0.36 0 0 0</pose><geometry><box><size>0.04 0.04 0.69</size></box></geometry><material><ambient>0.5 0.53 0.57 1</ambient><diffuse>0.68 0.71 0.75 1</diffuse></material></visual>
+        <visual name="conv_leg_2"><pose>-0.28 0.18 -0.36 0 0 0</pose><geometry><box><size>0.04 0.04 0.69</size></box></geometry><material><ambient>0.5 0.53 0.57 1</ambient><diffuse>0.68 0.71 0.75 1</diffuse></material></visual>
+        <visual name="scan_front"><pose>0.330 0 0.0255 0 0 0</pose><geometry><box><size>0.010 0.36 0.0015</size></box></geometry><material><ambient>0.1 0.85 1.0 1</ambient><diffuse>0.2 0.92 1.0 1</diffuse></material></visual>
+        <visual name="scan_back"><pose>0.130 0 0.0255 0 0 0</pose><geometry><box><size>0.012 0.36 0.0015</size></box></geometry><material><ambient>0.1 0.85 1.0 1</ambient><diffuse>0.2 0.92 1.0 1</diffuse></material></visual>
+        <visual name="scan_left"><pose>0.230 0.175 0.0255 0 0 0</pose><geometry><box><size>0.205 0.008 0.0015</size></box></geometry><material><ambient>0.1 0.85 1.0 1</ambient><diffuse>0.2 0.92 1.0 1</diffuse></material></visual>
+        <visual name="scan_right"><pose>0.230 -0.175 0.0255 0 0 0</pose><geometry><box><size>0.205 0.008 0.0015</size></box></geometry><material><ambient>0.1 0.85 1.0 1</ambient><diffuse>0.2 0.92 1.0 1</diffuse></material></visual>
       </link>
+      <plugin filename="gz-sim-track-controller-system" name="gz::sim::systems::TrackController">
+        <link>conveyor_link</link>
+        <min_velocity>-0.5</min_velocity>
+        <max_velocity>0.5</max_velocity>
+      </plugin>
     </model>
 
     <!-- DYNAMIC YELLOW OBSTACLE 1: CIRCLE MODE (Yellow Cylinder Ø10cm, H=26cm in 30cm mid zone) -->

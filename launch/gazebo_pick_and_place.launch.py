@@ -54,7 +54,7 @@ def _launch_setup(context, *args, **kwargs):
         output='screen'
     )
 
-    # 4. ROS-Gazebo Bridge (clock, joint_states, D435 RGB-D topics)
+    # 4. ROS-Gazebo Bridge (clock, joint_states, D435 RGB-D topics, Conveyor TrackController)
     bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -65,12 +65,14 @@ def _launch_setup(context, *args, **kwargs):
             '/d435/depth_image@sensor_msgs/msg/Image[gz.msgs.Image',
             '/d435/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo',
             '/d435/points@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
+            '/model/conveyor_feeder/link/conveyor_link/track_cmd_vel@std_msgs/msg/Float64]gz.msgs.Double',
         ],
         remappings=[
             ('/d435/image', '/camera/color/image_raw'),
             ('/d435/depth_image', '/camera/aligned_depth_to_color/image_raw'),
             ('/d435/camera_info', '/camera/color/camera_info'),
             ('/d435/points', '/camera/depth/color/points'),
+            ('/model/conveyor_feeder/link/conveyor_link/track_cmd_vel', '/conveyor/cmd_vel'),
         ],
         output='screen'
     )

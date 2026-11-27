@@ -28,12 +28,13 @@ except ImportError:
 
 try:
     import gz.transport13 as gz_transport
-    from gz.msgs10 import pose_pb2, boolean_pb2
+    from gz.msgs10 import pose_pb2, boolean_pb2, double_pb2
     HAVE_GZ_TRANSPORT = True
 except ImportError:
     gz_transport = None
     pose_pb2 = None
     boolean_pb2 = None
+    double_pb2 = None
     HAVE_GZ_TRANSPORT = False
 
 # ROS 2 imports (graceful fallback if running offline)
@@ -79,6 +80,19 @@ PROGRAMS_DIR = _resolve_programs_dir()
 os.makedirs(PROGRAMS_DIR, exist_ok=True)
 
 
+def _fix_label(lbl, fixed_h=None, align=None):
+    """Lock QLabel layout size hints so live text/status updates never shake the panel."""
+    if lbl is None:
+        return lbl
+    v_pol = QtWidgets.QSizePolicy.Fixed if fixed_h is not None else QtWidgets.QSizePolicy.Preferred
+    lbl.setSizePolicy(QtWidgets.QSizePolicy.Ignored, v_pol)
+    if fixed_h is not None:
+        lbl.setFixedHeight(int(fixed_h))
+    if align is not None:
+        lbl.setAlignment(align)
+    return lbl
+
+
 class RosWorker(QtCore.QObject):
     """ROS 2 Node communication bridge running on Qt event loop"""
     joint_state_signal = QtCore.pyqtSignal(list)
@@ -101,6 +115,7 @@ class RosWorker(QtCore.QObject):
         self.dyn_mode_pub = None
         self.dyn_speed_pub = None
         self.dyn_paused_pub = None
+        self.conveyor_vel_pub = None
         self._last_debug_img_ts = 0.0
         self._last_ui_img_ts = 0.0
 
@@ -120,6 +135,7 @@ class RosWorker(QtCore.QObject):
                 self.dyn_mode_pub = self.node.create_publisher(String, '/dynamic_obstacle/mode', 10)
                 self.dyn_speed_pub = self.node.create_publisher(Float64, '/dynamic_obstacle/speed', 10)
                 self.dyn_paused_pub = self.node.create_publisher(Bool, '/dynamic_obstacle/paused', 10)
+                self.conveyor_vel_pub = self.node.create_publisher(Float64, '/conveyor/cmd_vel', 10)
 
                 # Subscribers
                 self.node.create_subscription(JointState, '/joint_states', self._joint_cb, 10)
@@ -228,6 +244,12 @@ class RosWorker(QtCore.QObject):
             m = Bool()
             m.data = bool(paused)
             self.dyn_paused_pub.publish(m)
+
+    def publish_conveyor_vel(self, vel_mps: float):
+        if self.conveyor_vel_pub and HAVE_ROS2:
+            m = Float64()
+            m.data = float(vel_mps)
+            self.conveyor_vel_pub.publish(m)
 
     def publish_target(self, x, y, z, yaw=None):
         if self.target_pub and HAVE_ROS2:
@@ -511,8 +533,8 @@ class DobotJogPanel(QtWidgets.QFrame):
             lbl_a = QtWidgets.QLabel(axis)
             lbl_a.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 11px; min-width: 14px;")
             pill = QtWidgets.QLabel(init_txt)
-            pill.setAlignment(Qt.AlignCenter)
             pill.setStyleSheet(pill_style)
+            _fix_label(pill, fixed_h=24, align=Qt.AlignCenter)
             left_grid.addWidget(lbl_a, row_i, 0)
             left_grid.addWidget(pill, row_i, 1)
             self.val_pills[axis] = pill
@@ -1728,7 +1750,14 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         self.conveyor_running = False
         self.conveyor_speed_mps = 0.09
         self._conv_last_ts = 0.0
+        self._conv_last_pub_ts = 0.0
+        self.vpp_dwell_sec = 3.0
+        self._last_vpp_phase_msg = ""
         self.gz_node = gz_transport.Node() if HAVE_GZ_TRANSPORT else None
+        self._gz_conv_pub = (
+            self.gz_node.advertise("/model/conveyor_feeder/link/conveyor_link/track_cmd_vel", double_pb2.Double)
+            if (self.gz_node is not None and double_pb2 is not None) else None
+        )
         self.vpp_active_target_kind = None  # "orange_cube" | "green_cyl"
         self.vpp_orange_pose = None
         self.vpp_green_pose = None
@@ -1912,15 +1941,24 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         tb_lay = QtWidgets.QGridLayout(tele_box)
         tb_lay.setSpacing(8)
 
-        self.lbl_dyn_live_state = QtWidgets.QLabel("Trạng thái: Đang ở Bài toán Vật Cản Tĩnh (Hãy bấm Bài toán 2 để bật vật cản động)")
+        self.lbl_dyn_live_state = _fix_label(
+            QtWidgets.QLabel("Trạng thái: Đang ở Bài toán Vật Cản Tĩnh (Hãy bấm Bài toán 2 để bật vật cản động)"),
+            fixed_h=18,
+        )
         self.lbl_dyn_live_state.setStyleSheet("color: #94A3B8; font-weight: bold; font-size: 11px;")
         tb_lay.addWidget(self.lbl_dyn_live_state, 0, 0, 1, 2)
 
-        self.lbl_dyn_live_pos = QtWidgets.QLabel("Vị trí XY: [---, ---] m | H = --- cm | R = --- cm")
+        self.lbl_dyn_live_pos = _fix_label(
+            QtWidgets.QLabel("Vị trí XY: [---, ---] m | H = --- cm | R = --- cm"),
+            fixed_h=18,
+        )
         self.lbl_dyn_live_pos.setStyleSheet("color: #FDE68A; font-family: monospace; font-weight: bold; font-size: 12px;")
         tb_lay.addWidget(self.lbl_dyn_live_pos, 1, 0)
 
-        self.lbl_dyn_live_vel = QtWidgets.QLabel("Vận tốc (Vx, Vy): [0.00, 0.00] m/s | Độ lớn |V|: 0.00 m/s")
+        self.lbl_dyn_live_vel = _fix_label(
+            QtWidgets.QLabel("Vận tốc (Vx, Vy): [0.00, 0.00] m/s | Độ lớn |V|: 0.00 m/s"),
+            fixed_h=18,
+        )
         self.lbl_dyn_live_vel.setStyleSheet("color: #38BDF8; font-family: monospace; font-weight: bold; font-size: 12px;")
         tb_lay.addWidget(self.lbl_dyn_live_vel, 1, 1)
 
@@ -2119,13 +2157,17 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         breakdown_layout = QtWidgets.QHBoxLayout()
         self.lbl_delta_z = QtWidgets.QLabel("Δz: +10.5 cm")
         self.lbl_delta_z.setStyleSheet("font-family: monospace; font-size: 10px; color: #38BDF8;")
+        self.lbl_delta_z.setMinimumWidth(130)
+        _fix_label(self.lbl_delta_z, fixed_h=16)
         self.lbl_delta_r = QtWidgets.QLabel("Δr: +15.2 cm")
         self.lbl_delta_r.setStyleSheet("font-family: monospace; font-size: 10px; color: #94A3B8;")
+        self.lbl_delta_r.setMinimumWidth(130)
+        _fix_label(self.lbl_delta_r, fixed_h=16)
         breakdown_layout.addWidget(self.lbl_delta_z)
         breakdown_layout.addWidget(self.lbl_delta_r)
         sg_layout.addLayout(breakdown_layout)
 
-        self.safety_desc = QtWidgets.QLabel("✓ AN TOÀN (AUTO E-STOP: 1.0 cm)")
+        self.safety_desc = _fix_label(QtWidgets.QLabel("✓ AN TOÀN (AUTO E-STOP: 1.0 cm)"), fixed_h=18)
         self.safety_desc.setStyleSheet("color: #34D399; font-weight: bold; font-size: 10px;")
         sg_layout.addWidget(self.safety_desc)
 
@@ -2138,6 +2180,7 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         self.lbl_tele_nmpc = QtWidgets.QLabel("NMPC RTI Latency: 1.18 ms (OK)")
         self.lbl_tele_nmpc.setStyleSheet("font-family: monospace; font-size: 10px; color: #A78BFA;")
         for lbl_t in (self.lbl_tele_xyz, self.lbl_tele_pitch, self.lbl_tele_grip, self.lbl_tele_nmpc):
+            _fix_label(lbl_t, fixed_h=16)
             sg_layout.addWidget(lbl_t)
         lc_lay.addWidget(safety_group)
         mid_layout.addWidget(left_col, stretch=4)
@@ -2288,7 +2331,7 @@ class TeachPendantApp(QtWidgets.QMainWindow):
 
         top_strip = QtWidgets.QHBoxLayout()
         top_strip.setSpacing(5)
-        self.lbl_cam_stream_badge = QtWidgets.QLabel("⚪ Chờ D435...")
+        self.lbl_cam_stream_badge = _fix_label(QtWidgets.QLabel("⚪ Chờ D435..."), fixed_h=16)
         self.lbl_cam_stream_badge.setStyleSheet("color: #94A3B8; font-weight: bold; font-family: monospace; font-size: 10px;")
         top_strip.addWidget(self.lbl_cam_stream_badge, stretch=1)
 
@@ -2305,6 +2348,7 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         self.lbl_vision_video = QtWidgets.QLabel("Chưa có khung hình D435.\nHãy bật Gazebo (Tab 6) và bấm '▶ Vision'.")
         self.lbl_vision_video.setAlignment(Qt.AlignCenter)
         self.lbl_vision_video.setMinimumSize(300, 215)
+        self.lbl_vision_video.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
         self.lbl_vision_video.setStyleSheet(
             "background-color: #05080F; color: #64748B; border: 1px solid #334155; "
             "border-radius: 6px; font-size: 11px; font-weight: bold;"
@@ -2320,11 +2364,11 @@ class TeachPendantApp(QtWidgets.QMainWindow):
             lay = QtWidgets.QVBoxLayout(card)
             lay.setContentsMargins(6, 4, 6, 4)
             lay.setSpacing(1)
-            t_lbl = QtWidgets.QLabel(title_text)
+            t_lbl = _fix_label(QtWidgets.QLabel(title_text), fixed_h=16)
             t_lbl.setStyleSheet(f"font-weight: bold; color: {title_color}; font-size: 10px;")
-            l1 = QtWidgets.QLabel(line1)
+            l1 = _fix_label(QtWidgets.QLabel(line1), fixed_h=16)
             l1.setStyleSheet(f"font-family: monospace; font-size: 10px; font-weight: bold; color: {line1_color};")
-            l2 = QtWidgets.QLabel(line2)
+            l2 = _fix_label(QtWidgets.QLabel(line2), fixed_h=16)
             l2.setStyleSheet(f"font-family: monospace; font-size: 10px; color: {line2_color};")
             lay.addWidget(t_lbl); lay.addWidget(l1); lay.addWidget(l2)
             return card, lay, l1, l2
@@ -2333,7 +2377,7 @@ class TeachPendantApp(QtWidgets.QMainWindow):
             "📦 Phôi Băng Tải (Active)", "#F97316",
             "XYZ: ---, ---, --- m", "#FDBA74", "Yaw: ---° | --- cm", "#38BDF8"
         )
-        self.lbl_vis_box_status = QtWidgets.QLabel("Chờ nhận diện")
+        self.lbl_vis_box_status = _fix_label(QtWidgets.QLabel("Chờ nhận diện"), fixed_h=16)
         self.lbl_vis_box_status.setStyleSheet("font-size: 10px; color: #94A3B8;")
         bc_layout.addWidget(self.lbl_vis_box_status)
         obj_grid.addWidget(box_card, 0, 0)
@@ -2452,7 +2496,10 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         
         teach_title = QtWidgets.QLabel("📌 Dạy điểm trực tiếp từ Jogging:")
         teach_title.setStyleSheet("font-weight: bold; color: #38BDF8; font-size: 12px;")
-        self.lbl_palette_tcp = QtWidgets.QLabel(f"Tọa độ hiện tại: [{self.tcp_pos[0]:.3f}, {self.tcp_pos[1]:.3f}, {self.tcp_pos[2]:.3f}] m")
+        self.lbl_palette_tcp = _fix_label(
+            QtWidgets.QLabel(f"Tọa độ hiện tại: [{self.tcp_pos[0]:.3f}, {self.tcp_pos[1]:.3f}, {self.tcp_pos[2]:.3f}] m"),
+            fixed_h=18,
+        )
         self.lbl_palette_tcp.setStyleSheet("font-family: monospace; font-size: 11px; color: #34D399;")
         
         btn_record_curr = QtWidgets.QPushButton("+ LƯU TỌA ĐỘ HIỆN TẠI VÀO TREE")
@@ -2529,7 +2576,7 @@ class TeachPendantApp(QtWidgets.QMainWindow):
 
         top_strip = QtWidgets.QHBoxLayout()
         top_strip.setSpacing(6)
-        self.lbl_cam_stream_badge_tab6 = QtWidgets.QLabel("⚪ Đang chờ tín hiệu D435...")
+        self.lbl_cam_stream_badge_tab6 = _fix_label(QtWidgets.QLabel("⚪ Đang chờ tín hiệu D435..."), fixed_h=18)
         self.lbl_cam_stream_badge_tab6.setStyleSheet("color: #94A3B8; font-weight: bold; font-family: monospace; font-size: 10px;")
         top_strip.addWidget(self.lbl_cam_stream_badge_tab6, stretch=1)
 
@@ -2549,6 +2596,7 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         )
         self.lbl_vision_video_tab6.setAlignment(Qt.AlignCenter)
         self.lbl_vision_video_tab6.setMinimumSize(420, 310)
+        self.lbl_vision_video_tab6.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
         self.lbl_vision_video_tab6.setStyleSheet(
             "background-color: #05080F; color: #64748B; border: 1px solid #334155; "
             "border-radius: 6px; font-size: 12px; font-weight: bold;"
@@ -2566,6 +2614,7 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         q_top.setSpacing(6)
         self.chk_vision_sync_obs_tab6 = QtWidgets.QCheckBox("Đồng bộ Cản → NMPC")
         self.chk_vision_sync_obs_tab6.setStyleSheet("color: #34D399; font-weight: bold; font-size: 10px;")
+        self.chk_vision_sync_obs_tab6.setFixedWidth(215)
         self.chk_vision_sync_obs_tab6.toggled.connect(self.on_toggle_vision_obs_sync)
         q_top.addWidget(self.chk_vision_sync_obs_tab6)
         q_top.addStretch()
@@ -2602,7 +2651,8 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         gw_row = QtWidgets.QHBoxLayout()
         gw_row.setSpacing(5)
         self.lbl_grip_width_tab6 = QtWidgets.QLabel("🤏 Khẩu độ: 40 mm")
-        self.lbl_grip_width_tab6.setStyleSheet("color: #FBBF24; font-weight: bold; font-family: monospace; font-size: 10px; min-width: 112px;")
+        self.lbl_grip_width_tab6.setStyleSheet("color: #FBBF24; font-weight: bold; font-family: monospace; font-size: 10px;")
+        self.lbl_grip_width_tab6.setFixedSize(128, 18)
         self.grip_slider_tab6 = QtWidgets.QSlider(Qt.Horizontal)
         self.grip_slider_tab6.setRange(0, 85)
         self.grip_slider_tab6.setValue(int(self.gripper_width))
@@ -2628,7 +2678,8 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         gf_row = QtWidgets.QHBoxLayout()
         gf_row.setSpacing(5)
         self.lbl_force_val_tab6 = QtWidgets.QLabel(f"💪 Giới hạn lực: {int(self.gripper_force)} N")
-        self.lbl_force_val_tab6.setStyleSheet("color: #38BDF8; font-weight: bold; font-family: monospace; font-size: 10px; min-width: 112px;")
+        self.lbl_force_val_tab6.setStyleSheet("color: #38BDF8; font-weight: bold; font-family: monospace; font-size: 10px;")
+        self.lbl_force_val_tab6.setFixedSize(128, 18)
         self.force_slider_tab6 = QtWidgets.QSlider(Qt.Horizontal)
         self.force_slider_tab6.setRange(10, 120)
         self.force_slider_tab6.setValue(int(self.gripper_force))
@@ -2665,7 +2716,10 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         btn_confirm_grip.clicked.connect(self.confirm_vpp_grasp_settings)
         g_conf_row.addWidget(btn_confirm_grip)
 
-        self.lbl_vpp_grasp_confirmed = QtWidgets.QLabel("⚪ Mặc định 55 mm (Phôi 6cm) | Bấm Xác nhận để chốt")
+        self.lbl_vpp_grasp_confirmed = _fix_label(
+            QtWidgets.QLabel("⚪ Mặc định 55 mm (Phôi 6cm) | Bấm Xác nhận để chốt"),
+            fixed_h=18,
+        )
         self.lbl_vpp_grasp_confirmed.setStyleSheet("color: #FBBF24; font-family: monospace; font-size: 10px; font-weight: bold;")
         g_conf_row.addWidget(self.lbl_vpp_grasp_confirmed, stretch=1)
         q_vbox.addLayout(g_conf_row)
@@ -2697,7 +2751,10 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         bsc_lay.setContentsMargins(7, 5, 7, 5)
         bsc_lay.setSpacing(3)
 
-        self.lbl_vpp_box_state = QtWidgets.QLabel("📡 Đang chờ Camera quét phôi trên băng tải...")
+        self.lbl_vpp_box_state = _fix_label(
+            QtWidgets.QLabel("📡 Đang chờ Camera quét phôi trên băng tải..."),
+            fixed_h=18,
+        )
         self.lbl_vpp_box_state.setStyleSheet("font-size: 10px; font-weight: bold; color: #94A3B8;")
         bsc_lay.addWidget(self.lbl_vpp_box_state)
 
@@ -2705,7 +2762,7 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         self.rb_vpp_orange = QtWidgets.QRadioButton("🟧 Vuông Cam (6×6×6)")
         self.rb_vpp_orange.setStyleSheet("color: #FB923C; font-weight: bold; font-size: 10px;")
         self.rb_vpp_orange.toggled.connect(lambda ck: setattr(self, "vpp_manual_target_pref", "orange_cube") if ck else None)
-        self.lbl_vpp_orange_info = QtWidgets.QLabel("   XYZ: --- | ⚪ Chưa thấy")
+        self.lbl_vpp_orange_info = _fix_label(QtWidgets.QLabel("   XYZ: --- | ⚪ Chưa thấy"), fixed_h=18)
         self.lbl_vpp_orange_info.setStyleSheet("font-family: monospace; font-size: 10px; color: #FDBA74;")
         bsc_lay.addWidget(self.rb_vpp_orange)
         bsc_lay.addWidget(self.lbl_vpp_orange_info)
@@ -2714,13 +2771,16 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         self.rb_vpp_green = QtWidgets.QRadioButton("🟢 Trụ Xanh (Ø6×6)")
         self.rb_vpp_green.setStyleSheet("color: #4ADE80; font-weight: bold; font-size: 10px;")
         self.rb_vpp_green.toggled.connect(lambda ck: setattr(self, "vpp_manual_target_pref", "green_cyl") if ck else None)
-        self.lbl_vpp_green_info = QtWidgets.QLabel("   XYZ: --- | ⚪ Chưa thấy")
+        self.lbl_vpp_green_info = _fix_label(QtWidgets.QLabel("   XYZ: --- | ⚪ Chưa thấy"), fixed_h=18)
         self.lbl_vpp_green_info.setStyleSheet("font-family: monospace; font-size: 10px; color: #86EFAC;")
         bsc_lay.addWidget(self.rb_vpp_green)
         bsc_lay.addWidget(self.lbl_vpp_green_info)
 
         # Active in-zone summary (compact)
-        self.lbl_vpp_box_xyz = QtWidgets.QLabel("Ô gắp: Chờ phôi vào ranh giới [-0.50..-0.30]")
+        self.lbl_vpp_box_xyz = _fix_label(
+            QtWidgets.QLabel("Ô gắp: Chờ phôi vào ranh giới [-0.465..-0.325]"),
+            fixed_h=16,
+        )
         self.lbl_vpp_box_xyz.setStyleSheet("font-family: monospace; font-size: 9px; color: #38BDF8;")
         bsc_lay.addWidget(self.lbl_vpp_box_xyz)
         obj_row.addWidget(box_sel_card, stretch=3)
@@ -2730,9 +2790,9 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         esc_lay = QtWidgets.QVBoxLayout(ext_sel_card)
         esc_lay.setContentsMargins(7, 5, 7, 5)
         esc_lay.setSpacing(4)
-        self.lbl_vpp_tray_counts = QtWidgets.QLabel("🧩 Ô 2×2 → Cam: 0/2 | Xanh: 0/2")
+        self.lbl_vpp_tray_counts = _fix_label(QtWidgets.QLabel("🧩 Ô 2×2 → Cam: 0/2 | Xanh: 0/2"), fixed_h=18)
         self.lbl_vpp_tray_counts.setStyleSheet("color: #FDE047; font-weight: bold; font-family: monospace; font-size: 10px;")
-        self.lbl_vpp_obs_summary = QtWidgets.QLabel("🟡 Cản Vàng: --- | Chưa quét")
+        self.lbl_vpp_obs_summary = _fix_label(QtWidgets.QLabel("🟡 Cản Vàng: --- | Chưa quét"), fixed_h=18)
         self.lbl_vpp_obs_summary.setStyleSheet("font-family: monospace; font-size: 10px; color: #FACC15;")
 
         self.btn_vpp_conveyor = QtWidgets.QPushButton("🏭 Chạy Băng Tải (Đưa vào Ô gắp)")
@@ -2809,8 +2869,9 @@ class TeachPendantApp(QtWidgets.QMainWindow):
 
         place_opt_row = QtWidgets.QHBoxLayout()
         place_opt_row.setSpacing(6)
-        self.lbl_vpp_place_status = QtWidgets.QLabel(
-            "⚪ Chưa xác nhận vị trí đặt — Hãy Jog tay máy đến điểm cần đặt rồi bấm Xác Nhận."
+        self.lbl_vpp_place_status = _fix_label(
+            QtWidgets.QLabel("⚪ Chưa xác nhận vị trí đặt — Hãy Jog tay máy đến điểm cần đặt rồi bấm Xác Nhận."),
+            fixed_h=28,
         )
         self.lbl_vpp_place_status.setStyleSheet("color: #FBBF24; font-family: monospace; font-size: 10px; font-weight: bold;")
         self.lbl_vpp_place_status.setWordWrap(True)
@@ -2876,7 +2937,10 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         btn_row.addWidget(self.btn_vpp_stop, stretch=1)
         ex_lay.addLayout(btn_row)
 
-        self.lbl_vpp_phase = QtWidgets.QLabel("Sẵn sàng: Chọn vật ở (1), đặt điểm thả ở (2), rồi bấm Bắt Đầu.")
+        self.lbl_vpp_phase = _fix_label(
+            QtWidgets.QLabel("Sẵn sàng: Chọn vật ở (1), đặt điểm thả ở (2), rồi bấm Bắt Đầu."),
+            fixed_h=18,
+        )
         self.lbl_vpp_phase.setStyleSheet("color: #94A3B8; font-weight: bold; font-size: 10px;")
         ex_lay.addWidget(self.lbl_vpp_phase)
 
@@ -3290,14 +3354,25 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         for jp in self.jog_panels:
             jp.set_velocity_silent(val)
 
-    def _compute_pick_j6(self, bx, by, yaw_box_rad):
-        """Convert box yaw in base_link into wrist J6 angle compensating for base shoulder J1."""
+    def _compute_pick_j6(self, bx, by, yaw_box_rad, kind="orange_cube", dims=None):
+        """Compute wrist J6 for grasping: flat-face align for boxes (cube 4-way 90deg sym), 0 for round cylinders."""
+        if kind == "green_cyl":
+            return 0.0
         j1_approx = math.atan2(by, bx)
         j6 = j1_approx - float(yaw_box_rad)
-        while j6 > math.pi * 0.5:
-            j6 -= math.pi
-        while j6 < -math.pi * 0.5:
-            j6 += math.pi
+        is_square = (kind == "orange_cube") or (
+            dims is not None and len(dims) >= 2 and abs(float(dims[0]) - float(dims[1])) < 0.015
+        )
+        if is_square:
+            while j6 > math.pi * 0.25:
+                j6 -= math.pi * 0.5
+            while j6 < -math.pi * 0.25:
+                j6 += math.pi * 0.5
+        else:
+            while j6 > math.pi * 0.5:
+                j6 -= math.pi
+            while j6 < -math.pi * 0.5:
+                j6 += math.pi
         return j6
 
     def jog_r_nmpc(self, deg_delta):
@@ -3316,7 +3391,9 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         if box is None:
             return
         bx, by, _, yaw_box = box
-        j6 = self._compute_pick_j6(bx, by, yaw_box)
+        kind = getattr(self, "vpp_active_target_kind", None) or "orange_cube"
+        dims = getattr(self, "vision_box_dims", None)
+        j6 = self._compute_pick_j6(bx, by, yaw_box, kind=kind, dims=dims)
         self.desired_j6_rad = j6
         self.ros.publish_target(self.tcp_pos[0], self.tcp_pos[1], self.tcp_pos[2], yaw=j6)
 
@@ -3475,7 +3552,10 @@ class TeachPendantApp(QtWidgets.QMainWindow):
     def trigger_estop(self):
         self.is_running = False
         self.vpp_active = False
+        self.vpp_auto_armed = False
         self.vpp_state = "STOPPED"
+        if getattr(self, "conveyor_running", False):
+            self.toggle_conveyor_feeder(False)
         if hasattr(self, "lbl_vpp_phase"):
             self.lbl_vpp_phase.setText("⏹ Đã dừng khẩn cấp (E-STOP)")
             self.lbl_vpp_phase.setStyleSheet("color: #EF4444; font-weight: bold; font-size: 11px;")
@@ -3845,6 +3925,7 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         cmd = self._build_ros_shell_cmd(" ; ".join(reqs))
         subprocess.Popen(cmd, shell=True)
         self.conveyor_running = False
+        self._publish_conveyor_velocity(0.0)
         if hasattr(self, "btn_vpp_conveyor"):
             self.btn_vpp_conveyor.blockSignals(True)
             self.btn_vpp_conveyor.setChecked(False)
@@ -4372,8 +4453,9 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         pix = QtGui.QPixmap.fromImage(qimg)
         for lbl in (getattr(self, "lbl_vision_video", None), getattr(self, "lbl_vision_video_tab6", None)):
             if lbl is not None:
-                tw = max(400, lbl.width())
-                th = max(275, lbl.height())
+                rect = lbl.contentsRect()
+                tw = max(120, rect.width() - 2)
+                th = max(90, rect.height() - 2)
                 scaled = pix.scaled(tw, th, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 lbl.setPixmap(scaled)
         for badge in (getattr(self, "lbl_cam_stream_badge", None), getattr(self, "lbl_cam_stream_badge_tab6", None)):
@@ -4535,7 +4617,7 @@ class TeachPendantApp(QtWidgets.QMainWindow):
             self.lbl_vis_box_status.setText("⚪ Chờ phôi vào ranh giới Ô gắp")
             self.lbl_vis_box_status.setStyleSheet("font-size: 10px; color: #94A3B8;")
             if hasattr(self, "lbl_vpp_box_xyz"):
-                self.lbl_vpp_box_xyz.setText("Ô gắp: Chờ phôi vào ranh giới [-0.50..-0.30]")
+                self.lbl_vpp_box_xyz.setText("Ô gắp: Chờ phôi vào ranh giới [-0.465..-0.325]")
 
         if obs_state == "OCCLUDED":
             dims = getattr(self, "vision_obs_dims", None)
@@ -4569,8 +4651,11 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         self.on_gripper_slider(int(width_mm))
 
     def _vpp_set_phase_ui(self, text, pct, color="#38BDF8"):
-        self.lbl_vpp_phase.setText(text)
-        self.lbl_vpp_phase.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 10px;")
+        key = (text, color)
+        if getattr(self, "_last_vpp_phase_msg", None) != key:
+            self._last_vpp_phase_msg = key
+            self.lbl_vpp_phase.setText(text)
+            self.lbl_vpp_phase.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 10px;")
         self.vpp_progress.setValue(int(max(0, min(100, pct))))
 
     def confirm_vpp_place_pose(self):
@@ -4634,24 +4719,18 @@ class TeachPendantApp(QtWidgets.QMainWindow):
 
     @staticmethod
     def _is_in_pick_boundary(bx, by):
-        return (0.26 <= float(bx) <= 0.64) and (-0.495 <= float(by) <= -0.295)
+        return (0.305 <= float(bx) <= 0.595) and (-0.465 <= float(by) <= -0.325)
 
-    def _gz_set_model_pose(self, model_name, x, y, z_world, yaw=0.0):
-        if not self.gz_node or pose_pb2 is None or boolean_pb2 is None:
-            return
-        wname = "m0609_dynamic_obstacle_world" if self.sim_scenario == "dynamic" else "m0609_rail_world"
-        svc = f"/world/{wname}/set_pose"
-        req = pose_pb2.Pose()
-        req.name = str(model_name)
-        req.position.x = float(x)
-        req.position.y = float(y)
-        req.position.z = float(z_world)
-        req.orientation.z = math.sin(float(yaw) * 0.5)
-        req.orientation.w = math.cos(float(yaw) * 0.5)
-        try:
-            self.gz_node.request(svc, req, pose_pb2.Pose, boolean_pb2.Boolean, 35)
-        except Exception:
-            pass
+    def _publish_conveyor_velocity(self, vel_mps: float):
+        """Publish smooth physics belt speed via ROS 2 TrackController bridge + async gz_transport."""
+        self.ros.publish_conveyor_vel(vel_mps)
+        if getattr(self, "_gz_conv_pub", None) is not None and double_pb2 is not None:
+            try:
+                m = double_pb2.Double()
+                m.data = float(vel_mps)
+                self._gz_conv_pub.publish(m)
+            except Exception:
+                pass
 
     def toggle_conveyor_feeder(self, checked=None):
         if checked is None:
@@ -4659,6 +4738,13 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         else:
             self.conveyor_running = bool(checked)
         self._conv_last_ts = time.monotonic()
+        self._conv_last_pub_ts = 0.0
+        if self.conveyor_running:
+            self.vpp_stable_pose = None
+            self.vpp_stable_ts = 0.0
+            self._publish_conveyor_velocity(self.conveyor_speed_mps)
+        else:
+            self._publish_conveyor_velocity(0.0)
         if hasattr(self, "btn_vpp_conveyor"):
             self.btn_vpp_conveyor.blockSignals(True)
             self.btn_vpp_conveyor.setChecked(self.conveyor_running)
@@ -4678,47 +4764,35 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         dt = now - self._conv_last_ts
         if dt < 0.04:
             return
-        dt = min(0.10, dt)
         self._conv_last_ts = now
 
-        # Stop feeder smoothly once a workpiece has arrived cleanly inside the Pick Boundary stop line (y >= -0.40)
-        orange_ready = self.vpp_orange_pose is not None and -0.40 <= self.vpp_orange_pose[1] <= -0.295
-        green_ready = self.vpp_green_pose is not None and -0.40 <= self.vpp_green_pose[1] <= -0.295
-        if orange_ready or green_ready:
+        # Auto-stop smoothly via TrackController once a workpiece settles well inside the Pick Boundary (y >= -0.405)
+        orange_ready = self.vpp_orange_pose is not None and -0.405 <= self.vpp_orange_pose[1] <= -0.325
+        green_ready = self.vpp_green_pose is not None and -0.405 <= self.vpp_green_pose[1] <= -0.325
+        edge_safety = (
+            (self.vpp_orange_pose is not None and -0.340 <= self.vpp_orange_pose[1] <= -0.28)
+            or (self.vpp_green_pose is not None and -0.340 <= self.vpp_green_pose[1] <= -0.28)
+        )
+        if orange_ready or green_ready or edge_safety:
             self.toggle_conveyor_feeder(False)
             return
 
-        # Advance waiting parts smoothly toward y = -0.385 inside the conveyor Pick Boundary
-        dy = self.conveyor_speed_mps * dt
-        moved_any = False
-        candidates = []
-        if self.vpp_orange_pose and -0.78 <= self.vpp_orange_pose[1] < -0.39:
-            candidates.append(("target_orange_cube", self.vpp_orange_pose))
-        if self.vpp_green_pose and -0.78 <= self.vpp_green_pose[1] < -0.39:
-            candidates.append(("target_green_cyl", self.vpp_green_pose))
-        if not candidates:
+        # Safety stop if Vision is actively streaming and confirmed no waiting part remains on belt
+        waiting_orange = self.vpp_orange_pose is not None and -0.78 <= self.vpp_orange_pose[1] < -0.345
+        waiting_green = self.vpp_green_pose is not None and -0.78 <= self.vpp_green_pose[1] < -0.345
+        if self.vision_box_ts > 0.0 and (now - self.vision_box_ts) < 1.5 and not (waiting_orange or waiting_green):
             self.toggle_conveyor_feeder(False)
             return
 
-        # Keep second queued part at least 14cm behind frontmost part
-        candidates.sort(key=lambda it: it[1][1], reverse=True)
-        front_new_y = min(-0.385, candidates[0][1][1] + dy)
-        for idx, (mname, pose) in enumerate(candidates):
-            cur_x, cur_y = float(pose[0]), float(pose[1])
-            cap_y = -0.385 if idx == 0 else min(-0.46, front_new_y - 0.14)
-            new_y = min(cap_y, cur_y + dy)
-            if new_y > cur_y + 1e-4:
-                self._gz_set_model_pose(mname, cur_x, new_y, 0.781, float(pose[3]))
-                pose[1] = new_y
-                moved_any = True
-
-        if not moved_any:
-            self.toggle_conveyor_feeder(False)
+        # Re-publish belt velocity gently at 10 Hz for TrackController smoothness
+        if (now - getattr(self, "_conv_last_pub_ts", 0.0)) >= 0.10:
+            self._publish_conveyor_velocity(self.conveyor_speed_mps)
+            self._conv_last_pub_ts = now
 
     def _feed_next_conveyor_part(self):
         """Start smooth belt movement so the next waiting workpiece enters the Pick Boundary."""
-        waiting_green = self.vpp_auto_green_idx < 2 and self.vpp_green_pose and self.vpp_green_pose[1] < -0.40
-        waiting_orange = self.vpp_auto_orange_idx < 2 and self.vpp_orange_pose and self.vpp_orange_pose[1] < -0.40
+        waiting_green = self.vpp_auto_green_idx < 2 and self.vpp_green_pose and self.vpp_green_pose[1] < -0.405
+        waiting_orange = self.vpp_auto_orange_idx < 2 and self.vpp_orange_pose and self.vpp_orange_pose[1] < -0.405
         if waiting_green or waiting_orange:
             self.toggle_conveyor_feeder(True)
 
@@ -4789,7 +4863,8 @@ class TeachPendantApp(QtWidgets.QMainWindow):
                 self.radar.update_obstacle(ox, oy, safe_r, self.warn_margin, self.danger_margin)
                 self.ros.publish_obstacle(ox, oy, oz_top * 0.6, z_top=oz_top, radius=orad)
 
-        j6_pick = 0.0
+        j6_pick = 0.0 if kind == "green_cyl" else self._compute_pick_j6(bx, by, yaw_box, kind=kind, dims=dims)
+        self.desired_j6_rad = float(j6_pick)
         dz_offset = float(self.sp_vpp_pick_dz.value()) if hasattr(self, "sp_vpp_pick_dz") else -0.018
         pick_z = max(0.020, min(0.18, float(bz) + dz_offset))
         self.vpp_latched_box = [bx, by, pick_z, yaw_box, float(j6_pick), box_h]
@@ -4816,22 +4891,37 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         self._quick_gripper_set(85)
         tag = "Vuông Cam" if kind == "orange_cube" else ("Trụ Xanh" if kind == "green_cyl" else "Manual")
         self._vpp_set_phase_ui(
-            f"1/8 Mở kẹp [{tag}] & Chốt tọa độ [{bx:.3f}, {by:.3f}, {pick_z:.3f}] → [{place_pose[0]:.3f}, {place_pose[1]:.3f}]",
+            f"1/8 Mở kẹp [{tag} | J6={math.degrees(j6_pick):+.1f}°] [{bx:.3f}, {by:.3f}, {pick_z:.3f}] → [{place_pose[0]:.3f}, {place_pose[1]:.3f}]",
             8, "#38BDF8"
         )
 
     def _step_vpp_auto_monitor(self):
         if not self.vpp_auto_armed or self.vpp_active:
             return
+        if self.conveyor_running:
+            self.vpp_stable_pose = None
+            self.vpp_stable_ts = 0.0
+            self._vpp_set_phase_ui(
+                "⏳ Băng tải đang chạy — chờ phôi vào Ô gắp & băng tải dừng hẳn...",
+                5, "#FBBF24"
+            )
+            return
         if not self.vision_box_pose or (time.monotonic() - self.vision_box_ts) > 1.5:
             self.vpp_stable_pose = None
+            self.vpp_stable_ts = 0.0
             return
-        if getattr(self, "vision_box_state", "OK") in ("CARRIED", "MISSING"):
+        if getattr(self, "vision_box_state", "OK") != "OK":
             self.vpp_stable_pose = None
+            self.vpp_stable_ts = 0.0
             return
         bx, by, bz, yaw = [float(v) for v in self.vision_box_pose[:4]]
         if not self._is_in_pick_boundary(bx, by):
             self.vpp_stable_pose = None
+            self.vpp_stable_ts = 0.0
+            self._vpp_set_phase_ui(
+                "⏳ Phôi ngoài ranh giới vạch Ô gắp — chưa được phép gắp...",
+                5, "#94A3B8"
+            )
             return
 
         kind = self.vpp_active_target_kind or "orange_cube"
@@ -4840,17 +4930,34 @@ class TeachPendantApp(QtWidgets.QMainWindow):
             return
 
         now = time.monotonic()
+        yaw_diff = 0.0
+        if self.vpp_stable_pose is not None and kind != "green_cyl":
+            yaw_diff = abs(((yaw - self.vpp_stable_pose[3] + math.pi * 0.25) % (math.pi * 0.5)) - math.pi * 0.25)
         if (
             self.vpp_stable_pose is None
-            or math.hypot(bx - self.vpp_stable_pose[0], by - self.vpp_stable_pose[1]) > 0.012
+            or math.hypot(bx - self.vpp_stable_pose[0], by - self.vpp_stable_pose[1]) > 0.008
+            or yaw_diff > math.radians(6.0)
         ):
             self.vpp_stable_pose = [bx, by, bz, yaw]
             self.vpp_stable_ts = now
+            self._vpp_set_phase_ui(
+                f"⏳ Phôi ổn định trong Ô gắp: 0.0 / {self.vpp_dwell_sec:.1f} s...",
+                8, "#38BDF8"
+            )
             return
 
-        if (now - self.vpp_stable_ts) >= 0.50:
-            self.vpp_stable_pose = None
-            self._launch_vpp_cycle([bx, by, bz, yaw], kind, place_pose)
+        held = now - self.vpp_stable_ts
+        if held < float(self.vpp_dwell_sec):
+            pct = int(8 + 14 * min(1.0, held / float(self.vpp_dwell_sec)))
+            self._vpp_set_phase_ui(
+                f"⏳ Xác nhận phôi đứng yên trong Ô gắp: {held:.1f} / {self.vpp_dwell_sec:.1f} s...",
+                pct, "#38BDF8"
+            )
+            return
+
+        self.vpp_stable_pose = None
+        self.vpp_stable_ts = 0.0
+        self._launch_vpp_cycle([bx, by, bz, yaw], kind, place_pose)
 
     def _finish_vpp_cycle(self, went_home=True):
         if went_home:
@@ -4895,25 +5002,32 @@ class TeachPendantApp(QtWidgets.QMainWindow):
                 return
             self.vpp_auto_armed = True
             self.vpp_stable_pose = None
+            self.vpp_stable_ts = 0.0
             self.btn_vpp_start.setEnabled(False)
             self.btn_vpp_stop.setEnabled(True)
-            if (
+            in_zone_now = (
                 self.vision_box_pose
-                and (time.monotonic() - self.vision_box_ts) <= 3.0
-                and getattr(self, "vision_box_state", "MISSING") not in ("CARRIED", "MISSING")
+                and (time.monotonic() - self.vision_box_ts) <= 1.5
+                and getattr(self, "vision_box_state", "MISSING") == "OK"
                 and self._is_in_pick_boundary(self.vision_box_pose[0], self.vision_box_pose[1])
-            ):
-                kind = self.vpp_active_target_kind or "orange_cube"
-                place_pose = self._next_auto_place_pose(kind)
-                if place_pose is not None:
-                    self._launch_vpp_cycle(self.vision_box_pose, kind, place_pose)
-                    return
-            if self.vpp_conveyor_autofeed:
+            )
+            if not self.conveyor_running and not in_zone_now and self.vpp_conveyor_autofeed:
                 self._feed_next_conveyor_part()
-            self._vpp_set_phase_ui("🤖 AUTO SẴN SÀNG: Đang chờ phôi vào ranh giới Ô gắp trên băng tải...", 5, "#34D399")
+            self._vpp_set_phase_ui(
+                f"🤖 AUTO SẴN SÀNG: Chờ băng tải dừng & giữ phôi trong Ô gắp {self.vpp_dwell_sec:.1f}s...",
+                5, "#34D399"
+            )
+            self._step_vpp_auto_monitor()
             return
 
-        # Manual 1-Shot mode: pick selected in-zone workpiece once and place into user-taught pose
+        # Manual 1-Shot mode: refuse while conveyor is running, otherwise pick selected in-zone workpiece
+        if self.conveyor_running:
+            QtWidgets.QMessageBox.warning(
+                self, "Băng tải đang chạy",
+                "Không thể gắp khi băng tải vẫn đang hoạt động!\n"
+                "Hãy bấm '⏸ Dừng Băng Tải' trước khi gắp."
+            )
+            return
         self.vpp_auto_armed = False
         chosen_kind = self.vpp_active_target_kind or "manual"
         box = None

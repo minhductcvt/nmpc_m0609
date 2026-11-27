@@ -575,10 +575,10 @@ class DsrVisionNode(Node):
         try:
             rot_bc = rot_cb.T
             corners_base = np.array([
-                [0.27, -0.495, 0.005],
-                [0.63, -0.495, 0.005],
-                [0.63, -0.295, 0.005],
-                [0.27, -0.295, 0.005],
+                [0.275, -0.495, 0.005],
+                [0.625, -0.495, 0.005],
+                [0.625, -0.295, 0.005],
+                [0.275, -0.295, 0.005],
             ], dtype=np.float64)
             corners_cam = (corners_base - trans_cb) @ rot_bc.T
             if np.all(corners_cam[:, 2] > 0.25):
@@ -625,7 +625,7 @@ class DsrVisionNode(Node):
                 pose_4d = [bx, by, bz, yaw]
                 dims_3d = [bw, bd, bh]
 
-                in_pick_zone = (0.26 <= bx <= 0.64) and (-0.495 <= by <= -0.295)
+                in_pick_zone = (0.305 <= bx <= 0.595) and (-0.465 <= by <= -0.325)
                 in_conveyor = (0.22 <= bx <= 0.68) and (-0.78 <= by <= -0.24)
                 status_tag = " [TRONG O GAP]" if in_pick_zone else (" [CHO BANG TAI]" if in_conveyor else " [DA XEP]")
                 draw_col = det.color_bgr if in_pick_zone else (160, 160, 160)
