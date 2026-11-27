@@ -127,29 +127,43 @@
       </link>
     </model>
 
-    <!-- COMPACT 2x2 SORTING GRID (15x15cm) -->
+    <!-- ENLARGED 2x2 SORTING TRAY (24x24cm = 12x12cm/cell at [0.45, +0.245]) WITH SQUARE & CIRCLE MARKINGS -->
     <model name="sorting_tray_2x2">
       <static>true</static>
-      <pose>0.45 0.215 0.7505 0 0 0</pose>
+      <pose>0.45 0.245 0.7505 0 0 0</pose>
       <link name="grid_link">
-        <visual name="outer_top"><pose>-0.075 0 0 0 0 0</pose><geometry><box><size>0.005 0.155 0.001</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material></visual>
-        <visual name="outer_bot"><pose>0.075 0 0 0 0 0</pose><geometry><box><size>0.005 0.155 0.001</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material></visual>
-        <visual name="outer_l"><pose>0 -0.075 0 0 0 0</pose><geometry><box><size>0.155 0.005 0.001</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material></visual>
-        <visual name="outer_r"><pose>0 0.075 0 0 0 0</pose><geometry><box><size>0.155 0.005 0.001</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material></visual>
-        <visual name="mid_x"><pose>0 0 0 0 0 0</pose><geometry><box><size>0.005 0.150 0.001</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material></visual>
-        <visual name="mid_y"><pose>0 0 0 0 0 0</pose><geometry><box><size>0.150 0.005 0.001</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material></visual>
+        <visual name="outer_top"><pose>-0.120 0 0 0 0 0</pose><geometry><box><size>0.006 0.246 0.0015</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material></visual>
+        <visual name="outer_bot"><pose>0.120 0 0 0 0 0</pose><geometry><box><size>0.006 0.246 0.0015</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material></visual>
+        <visual name="outer_l"><pose>0 -0.120 0 0 0 0</pose><geometry><box><size>0.246 0.006 0.0015</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material></visual>
+        <visual name="outer_r"><pose>0 0.120 0 0 0 0</pose><geometry><box><size>0.246 0.006 0.0015</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material></visual>
+        <visual name="mid_x"><pose>0 0 0 0 0 0</pose><geometry><box><size>0.005 0.240 0.0015</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material></visual>
+        <visual name="mid_y"><pose>0 0 0 0 0 0</pose><geometry><box><size>0.240 0.005 0.0015</size></box></geometry><material><ambient>0.85 0.85 0.85 1</ambient><diffuse>0.92 0.92 0.92 1</diffuse></material></visual>
+        <visual name="sq1_t"><pose>-0.096 -0.060 0.0005 0 0 0</pose><geometry><box><size>0.004 0.076 0.0016</size></box></geometry><material><ambient>0.95 0.40 0.05 1</ambient><diffuse>1.0 0.48 0.08 1</diffuse></material></visual>
+        <visual name="sq1_b"><pose>-0.024 -0.060 0.0005 0 0 0</pose><geometry><box><size>0.004 0.076 0.0016</size></box></geometry><material><ambient>0.95 0.40 0.05 1</ambient><diffuse>1.0 0.48 0.08 1</diffuse></material></visual>
+        <visual name="sq1_l"><pose>-0.060 -0.096 0.0005 0 0 0</pose><geometry><box><size>0.076 0.004 0.0016</size></box></geometry><material><ambient>0.95 0.40 0.05 1</ambient><diffuse>1.0 0.48 0.08 1</diffuse></material></visual>
+        <visual name="sq1_r"><pose>-0.060 -0.024 0.0005 0 0 0</pose><geometry><box><size>0.076 0.004 0.0016</size></box></geometry><material><ambient>0.95 0.40 0.05 1</ambient><diffuse>1.0 0.48 0.08 1</diffuse></material></visual>
+        <visual name="sq2_t"><pose>-0.096 0.060 0.0005 0 0 0</pose><geometry><box><size>0.004 0.076 0.0016</size></box></geometry><material><ambient>0.95 0.40 0.05 1</ambient><diffuse>1.0 0.48 0.08 1</diffuse></material></visual>
+        <visual name="sq2_b"><pose>-0.024 0.060 0.0005 0 0 0</pose><geometry><box><size>0.004 0.076 0.0016</size></box></geometry><material><ambient>0.95 0.40 0.05 1</ambient><diffuse>1.0 0.48 0.08 1</diffuse></material></visual>
+        <visual name="sq2_l"><pose>-0.060 0.024 0.0005 0 0 0</pose><geometry><box><size>0.076 0.004 0.0016</size></box></geometry><material><ambient>0.95 0.40 0.05 1</ambient><diffuse>1.0 0.48 0.08 1</diffuse></material></visual>
+        <visual name="sq2_r"><pose>-0.060 0.096 0.0005 0 0 0</pose><geometry><box><size>0.076 0.004 0.0016</size></box></geometry><material><ambient>0.95 0.40 0.05 1</ambient><diffuse>1.0 0.48 0.08 1</diffuse></material></visual>
+        <visual name="cir1_out"><pose>0.060 -0.060 0.0004 0 0 0</pose><geometry><cylinder><radius>0.037</radius><length>0.0012</length></cylinder></geometry><material><ambient>0.10 0.85 0.35 1</ambient><diffuse>0.15 0.92 0.42 1</diffuse></material></visual>
+        <visual name="cir1_in"><pose>0.060 -0.060 0.0008 0 0 0</pose><geometry><cylinder><radius>0.031</radius><length>0.0014</length></cylinder></geometry><material><ambient>0.36 0.20 0.10 1</ambient><diffuse>0.52 0.30 0.15 1</diffuse></material></visual>
+        <visual name="cir1_dot"><pose>0.060 -0.060 0.0011 0 0 0</pose><geometry><cylinder><radius>0.005</radius><length>0.0015</length></cylinder></geometry><material><ambient>0.15 0.90 0.40 1</ambient><diffuse>0.25 0.95 0.48 1</diffuse></material></visual>
+        <visual name="cir2_out"><pose>0.060 0.060 0.0004 0 0 0</pose><geometry><cylinder><radius>0.037</radius><length>0.0012</length></cylinder></geometry><material><ambient>0.10 0.85 0.35 1</ambient><diffuse>0.15 0.92 0.42 1</diffuse></material></visual>
+        <visual name="cir2_in"><pose>0.060 0.060 0.0008 0 0 0</pose><geometry><cylinder><radius>0.031</radius><length>0.0014</length></cylinder></geometry><material><ambient>0.36 0.20 0.10 1</ambient><diffuse>0.52 0.30 0.15 1</diffuse></material></visual>
+        <visual name="cir2_dot"><pose>0.060 0.060 0.0011 0 0 0</pose><geometry><cylinder><radius>0.005</radius><length>0.0015</length></cylinder></geometry><material><ambient>0.15 0.90 0.40 1</ambient><diffuse>0.25 0.95 0.48 1</diffuse></material></visual>
       </link>
     </model>
 
     <!-- MANUAL FREE-DROP ZONE MARKER -->
     <model name="manual_drop_zone">
       <static>true</static>
-      <pose>0.45 0.54 0.7505 0 0 0</pose>
+      <pose>0.45 0.58 0.7505 0 0 0</pose>
       <link name="manual_link">
-        <visual name="m_top"><pose>-0.175 0 0 0 0 0</pose><geometry><box><size>0.005 0.42 0.001</size></box></geometry><material><ambient>0.15 0.55 0.95 1</ambient><diffuse>0.2 0.65 1.0 1</diffuse></material></visual>
-        <visual name="m_bot"><pose>0.175 0 0 0 0 0</pose><geometry><box><size>0.005 0.42 0.001</size></box></geometry><material><ambient>0.15 0.55 0.95 1</ambient><diffuse>0.2 0.65 1.0 1</diffuse></material></visual>
-        <visual name="m_l"><pose>0 -0.21 0 0 0 0</pose><geometry><box><size>0.355 0.005 0.001</size></box></geometry><material><ambient>0.15 0.55 0.95 1</ambient><diffuse>0.2 0.65 1.0 1</diffuse></material></visual>
-        <visual name="m_r"><pose>0 0.21 0 0 0 0</pose><geometry><box><size>0.355 0.005 0.001</size></box></geometry><material><ambient>0.15 0.55 0.95 1</ambient><diffuse>0.2 0.65 1.0 1</diffuse></material></visual>
+        <visual name="m_top"><pose>-0.170 0 0 0 0 0</pose><geometry><box><size>0.005 0.34 0.001</size></box></geometry><material><ambient>0.15 0.55 0.95 1</ambient><diffuse>0.2 0.65 1.0 1</diffuse></material></visual>
+        <visual name="m_bot"><pose>0.170 0 0 0 0 0</pose><geometry><box><size>0.005 0.34 0.001</size></box></geometry><material><ambient>0.15 0.55 0.95 1</ambient><diffuse>0.2 0.65 1.0 1</diffuse></material></visual>
+        <visual name="m_l"><pose>0 -0.17 0 0 0 0</pose><geometry><box><size>0.345 0.005 0.001</size></box></geometry><material><ambient>0.15 0.55 0.95 1</ambient><diffuse>0.2 0.65 1.0 1</diffuse></material></visual>
+        <visual name="m_r"><pose>0 0.17 0 0 0 0</pose><geometry><box><size>0.345 0.005 0.001</size></box></geometry><material><ambient>0.15 0.55 0.95 1</ambient><diffuse>0.2 0.65 1.0 1</diffuse></material></visual>
       </link>
     </model>
 

@@ -1767,8 +1767,8 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         self.vpp_auto_orange_idx = 0
         self.vpp_auto_green_idx = 0
         self.vpp_auto_slots = {
-            "orange_cube": [(0.4125, 0.1775, 0.032), (0.4125, 0.2525, 0.032)],
-            "green_cyl":   [(0.4875, 0.1775, 0.032), (0.4875, 0.2525, 0.032)],
+            "orange_cube": [(0.390, 0.185, 0.028), (0.390, 0.305, 0.028)],
+            "green_cyl":   [(0.510, 0.185, 0.028), (0.510, 0.305, 0.028)],
         }
         self.vpp_cycle_place_pose = None
         self.vpp_cycle_kind = None
@@ -4715,7 +4715,10 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         if idx >= len(slots):
             return None
         sx, sy, sz = slots[idx]
-        return [float(sx), float(sy), float(sz), 0.0]
+        # Orient wrist J6 at drop so cube's 4 edges align parallel to the square slot (0 deg world X/Y);
+        # cylinder uses radial symmetry (j6 = 0.0) centered on circle marker.
+        j6_place = self._compute_pick_j6(sx, sy, 0.0, kind=kind)
+        return [float(sx), float(sy), float(sz), float(j6_place)]
 
     @staticmethod
     def _is_in_pick_boundary(bx, by):
@@ -5228,18 +5231,23 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         elif self.vpp_state == "DESCEND_PLACE":
             px, py, pz, _ = (self.vpp_cycle_place_pose or self.place_pose_taught)
             j6_pl = self._vpp_target_place_j6(self.vpp_latched_box[4])
-            target_pz = max(0.030, pz)
+            target_pz = max(0.026, pz)
             self.desired_j6_rad = j6_pl
             self.ros.publish_target(px, py, target_pz, yaw=j6_pl)
             dist = math.hypot(math.hypot(self.tcp_pos[0] - px, self.tcp_pos[1] - py), self.tcp_pos[2] - target_pz)
             cur_j6 = float(self.joint_angles[5]) if len(self.joint_angles) >= 6 else j6_pl
             j6_err = abs(((cur_j6 - j6_pl + math.pi) % (2.0 * math.pi)) - math.pi)
-            self._vpp_set_phase_ui("7/8 Hạ thẳng đứng xuống vị trí đặt...", 84, "#38BDF8")
-            if (dist < 0.028 and j6_err < 0.08) or elapsed > 3.8:
-                self.vpp_state = "RELEASE_OPEN"
-                self.vpp_state_ts = now
-                self._quick_gripper_set(85)
-                self._vpp_set_phase_ui("7/8 Mở kẹp thả vật...", 90, "#FBBF24")
+            self._vpp_set_phase_ui(
+                f"7/8 Hạ & xoay khớp J6={math.degrees(j6_pl):+.1f}° đặt đúng vào ô...",
+                84, "#38BDF8"
+            )
+            if (dist < 0.022 and j6_err < 0.045) or elapsed > 4.0:
+                self.vpp_settle_ts += 0.02
+                if self.vpp_settle_ts >= 0.25 or elapsed > 4.0:
+                    self.vpp_state = "RELEASE_OPEN"
+                    self.vpp_state_ts = now
+                    self._quick_gripper_set(85)
+                    self._vpp_set_phase_ui("7/8 Mở kẹp thả vật...", 90, "#FBBF24")
 
         elif self.vpp_state == "RELEASE_OPEN":
             px, py, pz, _ = (self.vpp_cycle_place_pose or self.place_pose_taught)
