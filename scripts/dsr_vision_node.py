@@ -341,6 +341,8 @@ class DsrVisionNode(Node):
             "obstacle_pillar": TrackedObjectState(),
         }
         self.active_target_kind: Optional[str] = None
+        self.part_tracks: Dict[int, dict] = {}
+        self.next_part_id: int = 1
         self.current_q = [0.0, 0.0, 1.5708, 0.0, 1.5708, 0.0]
         self.has_joint_state = False
         self.tcp_pos = compute_m0609_tcp(self.current_q)
@@ -565,9 +567,10 @@ class DsrVisionNode(Node):
         debug_img = bgr.copy()
         seen_labels = set()
 
-        # Collect conveyor workpieces (orange_cube / green_cyl): strictly ONLY pick inside Pick Boundary [-0.495, -0.295]
+        # Collect ALL visible workpieces across conveyor + board and maintain persistent sequential IDs (#1, #2, ...)
         pick_candidates = []
         conveyor_items = []
+        raw_visible_parts = []
         orange_best = None
         green_best = None
 
@@ -627,16 +630,13 @@ class DsrVisionNode(Node):
 
                 in_pick_zone = (0.305 <= bx <= 0.595) and (-0.465 <= by <= -0.325)
                 in_conveyor = (0.22 <= bx <= 0.68) and (-0.95 <= by <= -0.24)
-                status_tag = " [TRONG O GAP]" if in_pick_zone else (" [CHO BANG TAI]" if in_conveyor else " [DA XEP]")
-                draw_col = det.color_bgr if in_pick_zone else (160, 160, 160)
-                cv2.drawContours(debug_img, [det.contour], -1, draw_col, 2)
-                cv2.rectangle(debug_img, (x, y), (x + w, y + h), draw_col, 1)
-                tag_wp = "CAM" if det.label == "orange_cube" else "XANH"
-                txt = f"{tag_wp}{status_tag} [{bx:.2f},{by:.2f}] {bw*100:.1f}x{bh*100:.1f}cm"
-                cv2.putText(
-                    debug_img, txt, (x, max(18, y - 8)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, draw_col, 2
-                )
+                in_workspace = (0.20 <= bx <= 0.72) and (-0.96 <= by <= 0.80)
+                if in_workspace:
+                    raw_visible_parts.append((
+                        det.label, pose_4d, dims_3d, in_pick_zone, in_conveyor, det, fg_occ, fg_ratio
+                    ))
+                else:
+                    cv2.drawContours(debug_img, [det.contour], -1, (140, 140, 140), 1)
 
                 if in_conveyor:
                     conveyor_items.append({
@@ -651,7 +651,7 @@ class DsrVisionNode(Node):
                     elif det.label == "green_cyl":
                         if green_best is None or (in_pick_zone and not green_best[5]):
                             green_best = (pose_4d, dims_3d, det, fg_occ, fg_ratio, in_pick_zone)
-                    # STRICT PICK BOUNDARY: Only workpieces inside [TRONG O GAP] are eligible for picking!
+                    # STRICT PICK BOUNDARY: Only workpieces inside [TRONG O GAP] are eligible for Auto picking!
                     if in_pick_zone:
                         score = abs(by - (-0.39)) + 0.3 * abs(bx - 0.45)
                         pick_candidates.append((score, det.label, pose_4d, dims_3d, det, fg_occ, fg_ratio))
@@ -715,6 +715,61 @@ class DsrVisionNode(Node):
                         debug_img, f"OBS OCCLUDED ({fg_ratio*100:.0f}%) - LOCKED", (x, max(18, y - 8)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.44, (0, 165, 255), 2
                     )
+
+        # Match visible workpieces to persistent sequential IDs (#1, #2, #3...) and draw #ID overlay
+        now_t = time.monotonic()
+        # Sort front-to-back so initial pieces stabilize deterministically as #1, #2
+        raw_visible_parts.sort(key=lambda item: -float(item[1][1]))
+        matched_ids = set()
+        detected_items = []
+        for kind_p, pose_p, dims_p, in_pz, in_cv, det_p, fg_occ_p, _fg_r in raw_visible_parts:
+            px, py = float(pose_p[0]), float(pose_p[1])
+            best_pid, best_dist = None, 0.095
+            for pid, tr in self.part_tracks.items():
+                if pid in matched_ids or tr["kind"] != kind_p:
+                    continue
+                d_xy = math.hypot(px - tr["pose"][0], py - tr["pose"][1])
+                if d_xy < best_dist:
+                    best_dist = d_xy
+                    best_pid = pid
+            if best_pid is None:
+                best_pid = self.next_part_id
+                self.next_part_id += 1
+            matched_ids.add(best_pid)
+            self.part_tracks[best_pid] = {
+                "kind": kind_p,
+                "pose": [round(float(v), 4) for v in pose_p],
+                "dims": [round(float(v), 4) for v in dims_p],
+                "in_zone": bool(in_pz),
+                "in_conveyor": bool(in_cv),
+                "last_seen": now_t,
+            }
+            detected_items.append({
+                "id": int(best_pid),
+                "kind": kind_p,
+                "pose": self.part_tracks[best_pid]["pose"],
+                "dims": self.part_tracks[best_pid]["dims"],
+                "in_zone": bool(in_pz),
+                "in_conveyor": bool(in_cv),
+            })
+
+            x, y, w, h = det_p.bbox
+            status_tag = " [TRONG O]" if in_pz else (" [BANG TAI]" if in_cv else " [BAN GO]")
+            draw_col = det_p.color_bgr if in_pz else (200, 210, 220)
+            cv2.drawContours(debug_img, [det_p.contour], -1, draw_col, 2)
+            cv2.rectangle(debug_img, (x, y), (x + w, y + h), draw_col, 1)
+            tag_wp = "VUONG" if kind_p == "orange_cube" else "TRU"
+            txt = f"#{best_pid} {tag_wp}{status_tag} [{px:.2f},{py:.2f}]"
+            cv2.putText(
+                debug_img, txt, (x, max(18, y - 8)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.42, draw_col, 2
+            )
+
+        for old_pid in [pid for pid, tr in self.part_tracks.items() if (now_t - tr["last_seen"]) > 0.9]:
+            del self.part_tracks[old_pid]
+        if not self.part_tracks:
+            self.next_part_id = 1
+        detected_items.sort(key=lambda it: it["id"])
 
         # Update separate class trackers (orange_cube / green_cyl) for UI readouts
         for cls_name, best in (("orange_cube", orange_best), ("green_cyl", green_best)):
@@ -820,6 +875,7 @@ class DsrVisionNode(Node):
             "orange_in_zone": bool(orange_best[5]) if orange_best is not None else False,
             "green_in_zone": bool(green_best[5]) if green_best is not None else False,
             "conveyor_items": conveyor_items,
+            "detected_items": detected_items,
         }
         status_msg = String()
         status_msg.data = json.dumps(status_payload)

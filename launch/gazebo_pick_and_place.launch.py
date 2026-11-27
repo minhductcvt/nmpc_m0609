@@ -77,12 +77,12 @@ def _launch_setup(context, *args, **kwargs):
         output='screen'
     )
 
-    # 4b. Static TF2 transforms for D435 Camera Frame (matches SDF pose 0.82 0.12 2.04 0 1.24 3.14159265)
+    # 4b. Static TF2 transforms for D435 Camera Frame (matches SDF pose 0.82 -0.05 2.04 0 1.24 3.14159265)
     tf_base_to_d435 = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         arguments=[
-            '--x', '0.82', '--y', '0.12', '--z', '1.29',
+            '--x', '0.82', '--y', '-0.05', '--z', '1.29',
             '--roll', '0.0', '--pitch', '1.24', '--yaw', '3.14159265',
             '--frame-id', 'base_link', '--child-frame-id', 'd435_link'
         ],

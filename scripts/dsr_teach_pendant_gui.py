@@ -1770,6 +1770,9 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         self.vpp_orange_in_zone = False
         self.vpp_green_in_zone = False
         self.vpp_conveyor_items = []
+        self.vpp_detected_items = []
+        self.vpp_selected_part_id = None
+        self._last_parts_ui_sig = None
         self.vpp_auto_orange_idx = 0
         self.vpp_auto_green_idx = 0
         self.vpp_auto_slots = {
@@ -2742,8 +2745,8 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         r_outer.setContentsMargins(0, 0, 0, 0)
         r_outer.setSpacing(6)
 
-        # Section 1: Pure Workpiece Recognition & Selection (Camera D435)
-        obj_box = QtWidgets.QGroupBox("1. Nhận Diện & Chọn Phôi (Camera D435)")
+        # Section 1: Minimal Numbered Workpiece Selector (Camera D435)
+        obj_box = QtWidgets.QGroupBox("1. Chọn Phôi Nhận Diện (Camera D435)")
         ob_lay = QtWidgets.QVBoxLayout(obj_box)
         ob_lay.setContentsMargins(8, 8, 8, 6)
         ob_lay.setSpacing(4)
@@ -2755,40 +2758,28 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         box_sel_card.setObjectName("cardFrame")
         bsc_lay = QtWidgets.QVBoxLayout(box_sel_card)
         bsc_lay.setContentsMargins(7, 5, 7, 5)
-        bsc_lay.setSpacing(3)
+        bsc_lay.setSpacing(4)
 
         self.lbl_vpp_box_state = _fix_label(
-            QtWidgets.QLabel("📡 Đang chờ Camera quét phôi trên băng tải..."),
+            QtWidgets.QLabel("📡 Chờ Camera quét phôi (#ID)..."),
             fixed_h=18,
         )
         self.lbl_vpp_box_state.setStyleSheet("font-size: 10px; font-weight: bold; color: #94A3B8;")
         bsc_lay.addWidget(self.lbl_vpp_box_state)
 
-        # Orange Cube live row
-        self.rb_vpp_orange = QtWidgets.QRadioButton("🟧 Vuông Cam (6×6×6)")
-        self.rb_vpp_orange.setStyleSheet("color: #FB923C; font-weight: bold; font-size: 10px;")
-        self.rb_vpp_orange.toggled.connect(lambda ck: setattr(self, "vpp_manual_target_pref", "orange_cube") if ck else None)
-        self.lbl_vpp_orange_info = _fix_label(QtWidgets.QLabel("   XYZ: --- | ⚪ Chưa thấy"), fixed_h=18)
-        self.lbl_vpp_orange_info.setStyleSheet("font-family: monospace; font-size: 10px; color: #FDBA74;")
-        bsc_lay.addWidget(self.rb_vpp_orange)
-        bsc_lay.addWidget(self.lbl_vpp_orange_info)
-
-        # Green Cylinder live row
-        self.rb_vpp_green = QtWidgets.QRadioButton("🟢 Trụ Xanh (Ø6×6)")
-        self.rb_vpp_green.setStyleSheet("color: #4ADE80; font-weight: bold; font-size: 10px;")
-        self.rb_vpp_green.toggled.connect(lambda ck: setattr(self, "vpp_manual_target_pref", "green_cyl") if ck else None)
-        self.lbl_vpp_green_info = _fix_label(QtWidgets.QLabel("   XYZ: --- | ⚪ Chưa thấy"), fixed_h=18)
-        self.lbl_vpp_green_info.setStyleSheet("font-family: monospace; font-size: 10px; color: #86EFAC;")
-        bsc_lay.addWidget(self.rb_vpp_green)
-        bsc_lay.addWidget(self.lbl_vpp_green_info)
-
-        # Active in-zone summary (compact)
-        self.lbl_vpp_box_xyz = _fix_label(
-            QtWidgets.QLabel("Ô gắp: Chờ phôi vào ranh giới [-0.465..-0.325]"),
-            fixed_h=16,
+        self.lst_vpp_parts = QtWidgets.QListWidget()
+        self.lst_vpp_parts.setFixedHeight(92)
+        self.lst_vpp_parts.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
+        self.lst_vpp_parts.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.lst_vpp_parts.setStyleSheet(
+            "QListWidget { background: #0B1120; border: 1px solid #334155; border-radius: 5px; "
+            "font-family: monospace; font-size: 10px; color: #CBD5E1; padding: 2px; }"
+            "QListWidget::item { padding: 4px 6px; border-radius: 4px; }"
+            "QListWidget::item:selected { background: #0C4A6E; color: #E0F2FE; border: 1px solid #38BDF8; font-weight: bold; }"
+            "QListWidget::item:hover { background: #1E293B; }"
         )
-        self.lbl_vpp_box_xyz.setStyleSheet("font-family: monospace; font-size: 9px; color: #38BDF8;")
-        bsc_lay.addWidget(self.lbl_vpp_box_xyz)
+        self.lst_vpp_parts.itemSelectionChanged.connect(self._on_vpp_part_selected)
+        bsc_lay.addWidget(self.lst_vpp_parts)
         obj_row.addWidget(box_sel_card, stretch=3)
 
         ext_sel_card = QtWidgets.QFrame()
@@ -4706,6 +4697,25 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         self.vpp_orange_in_zone = bool(st.get("orange_in_zone", False))
         self.vpp_green_in_zone = bool(st.get("green_in_zone", False))
         self.vpp_conveyor_items = list(st.get("conveyor_items") or [])
+        det_items = list(st.get("detected_items") or [])
+        if not det_items:
+            # Backwards-compatible fallback when older status payload omits detected_items
+            fb_id = 1
+            if self.vpp_orange_pose:
+                det_items.append({
+                    "id": fb_id, "kind": "orange_cube",
+                    "pose": self.vpp_orange_pose, "dims": [0.06, 0.06, 0.06],
+                    "in_zone": self.vpp_orange_in_zone, "in_conveyor": True,
+                })
+                fb_id += 1
+            if self.vpp_green_pose:
+                det_items.append({
+                    "id": fb_id, "kind": "green_cyl",
+                    "pose": self.vpp_green_pose, "dims": [0.06, 0.06, 0.06],
+                    "in_zone": self.vpp_green_in_zone, "in_conveyor": True,
+                })
+        self.vpp_detected_items = det_items
+        self._refresh_vpp_parts_list()
 
         if hasattr(self, "lbl_vis_slot3_xyz"):
             if self.vpp_orange_pose:
@@ -4735,46 +4745,21 @@ class TeachPendantApp(QtWidgets.QMainWindow):
                 self.lbl_vis_slot4_info.setText("⚪ Không thấy trên băng tải")
                 self.lbl_vis_slot4_info.setStyleSheet("font-size: 10px; color: #94A3B8;")
 
-        # Update ALL detected conveyor workpieces simultaneously in Tab 3 Section 1
-        n_seen = (1 if self.vpp_orange_pose else 0) + (1 if self.vpp_green_pose else 0)
-        n_in_zone = (1 if self.vpp_orange_in_zone else 0) + (1 if self.vpp_green_in_zone else 0)
-        if hasattr(self, "lbl_vpp_orange_info"):
-            if self.vpp_orange_pose:
-                ox, oy, oz, _ = self.vpp_orange_pose
-                badge = "🟢 TRONG Ô GẮP" if self.vpp_orange_in_zone else "🟡 Chờ ngoài ô gắp"
-                self.lbl_vpp_orange_info.setText(f"   [{ox:.3f}, {oy:.3f}, {oz:.3f}] | {badge}")
-                self.lbl_vpp_orange_info.setStyleSheet(
-                    f"font-family: monospace; font-size: 10px; color: {'#34D399' if self.vpp_orange_in_zone else '#FBBF24'}; font-weight: bold;"
-                )
-            else:
-                self.lbl_vpp_orange_info.setText("   ⚪ Không thấy trên băng tải")
-                self.lbl_vpp_orange_info.setStyleSheet("font-family: monospace; font-size: 10px; color: #94A3B8;")
-
-        if hasattr(self, "lbl_vpp_green_info"):
-            if self.vpp_green_pose:
-                gx, gy, gz, _ = self.vpp_green_pose
-                badge = "🟢 TRONG Ô GẮP" if self.vpp_green_in_zone else "🟡 Chờ ngoài ô gắp"
-                self.lbl_vpp_green_info.setText(f"   [{gx:.3f}, {gy:.3f}, {gz:.3f}] | {badge}")
-                self.lbl_vpp_green_info.setStyleSheet(
-                    f"font-family: monospace; font-size: 10px; color: {'#34D399' if self.vpp_green_in_zone else '#FBBF24'}; font-weight: bold;"
-                )
-            else:
-                self.lbl_vpp_green_info.setText("   ⚪ Không thấy trên băng tải")
-                self.lbl_vpp_green_info.setStyleSheet("font-family: monospace; font-size: 10px; color: #94A3B8;")
-
-        if hasattr(self, "lbl_vpp_box_xyz") and hasattr(self, "lbl_vpp_box_state"):
-            if box_state not in ("CARRIED", "MISSING") and self.vision_box_pose:
-                bx, by, bz, _ = self.vision_box_pose
-                name_tag = "Vuông Cam" if target_kind == "orange_cube" else "Trụ Xanh"
-                self.lbl_vpp_box_xyz.setText(f"Ô gắp: {name_tag} [{bx:.3f}, {by:.3f}, {bz:.3f}] m")
+        # Update numbered workpiece list header & minimal selector in Tab 3 Section 1
+        n_seen = len(self.vpp_detected_items)
+        n_in_zone = sum(1 for it in self.vpp_detected_items if it.get("in_zone"))
+        if hasattr(self, "lbl_vpp_box_state"):
             if box_state == "CARRIED":
-                self.lbl_vpp_box_state.setText("🔵 Đang kẹp trên tay máy")
+                self.lbl_vpp_box_state.setText("🔵 Đang kẹp phôi trên tay máy")
                 self.lbl_vpp_box_state.setStyleSheet("font-size: 10px; font-weight: bold; color: #38BDF8;")
             elif n_seen > 0:
-                self.lbl_vpp_box_state.setText(f"📡 Nhận diện {n_seen} phôi ({n_in_zone} trong Ô gắp)")
+                if self.vpp_run_mode == "manual":
+                    self.lbl_vpp_box_state.setText(f"📡 Thấy {n_seen} phôi — Chọn #ID để gắp tự do")
+                else:
+                    self.lbl_vpp_box_state.setText(f"📡 Thấy {n_seen} phôi ({n_in_zone} trong Ô gắp)")
                 self.lbl_vpp_box_state.setStyleSheet("font-size: 10px; font-weight: bold; color: #34D399;")
             else:
-                self.lbl_vpp_box_state.setText("⚪ Chưa thấy phôi trên băng tải")
+                self.lbl_vpp_box_state.setText("⚪ Chưa thấy phôi trong khung Camera D435")
                 self.lbl_vpp_box_state.setStyleSheet("font-size: 10px; color: #94A3B8;")
 
         if box_state == "CARRIED" and st.get("box_pose"):
@@ -4856,8 +4841,57 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         )
         self.lbl_vpp_place_status.setStyleSheet("color: #FBBF24; font-family: monospace; font-size: 10px; font-weight: bold;")
 
+    def _on_vpp_part_selected(self):
+        if not hasattr(self, "lst_vpp_parts"):
+            return
+        cur = self.lst_vpp_parts.currentItem()
+        if cur is None:
+            return
+        pid = cur.data(Qt.UserRole)
+        if pid is not None:
+            self.vpp_selected_part_id = int(pid)
+            for it in getattr(self, "vpp_detected_items", []):
+                if it.get("id") == self.vpp_selected_part_id:
+                    self.vpp_manual_target_pref = it.get("kind", "auto")
+                    break
+
+    def _refresh_vpp_parts_list(self):
+        if not hasattr(self, "lst_vpp_parts"):
+            return
+        items = getattr(self, "vpp_detected_items", [])
+        sig = tuple(
+            (int(it["id"]), str(it["kind"]), round(float(it["pose"][0]), 2), round(float(it["pose"][1]), 2), bool(it.get("in_zone")), self.vpp_run_mode)
+            for it in items if it.get("pose")
+        )
+        if sig == getattr(self, "_last_parts_ui_sig", None):
+            return
+        self._last_parts_ui_sig = sig
+
+        ids = [int(it["id"]) for it in items]
+        if self.vpp_selected_part_id not in ids:
+            self.vpp_selected_part_id = ids[0] if ids else None
+
+        self.lst_vpp_parts.blockSignals(True)
+        self.lst_vpp_parts.clear()
+        for it in items:
+            pid = int(it["id"])
+            kind = it.get("kind", "orange_cube")
+            px, py = float(it["pose"][0]), float(it["pose"][1])
+            in_z = bool(it.get("in_zone"))
+            icon = "🟧" if kind == "orange_cube" else "🟢"
+            shape_nm = "Vuông Cam" if kind == "orange_cube" else "Trụ Xanh"
+            zone_tag = "Trong Ô" if in_z else ("Manual OK" if self.vpp_run_mode == "manual" else "Ngoài Ô")
+            row_item = QtWidgets.QListWidgetItem(f"{icon} #{pid} · {shape_nm} [{px:.2f}, {py:.2f}] · {zone_tag}")
+            row_item.setData(Qt.UserRole, pid)
+            self.lst_vpp_parts.addItem(row_item)
+            if pid == self.vpp_selected_part_id:
+                self.lst_vpp_parts.setCurrentItem(row_item)
+        self.lst_vpp_parts.blockSignals(False)
+
     def _on_vpp_run_mode_changed(self, mode):
         self.vpp_run_mode = "auto" if mode == "auto" else "manual"
+        self._last_parts_ui_sig = None
+        self._refresh_vpp_parts_list()
         if getattr(self, "conveyor_running", False):
             self.toggle_conveyor_feeder(False)
         if hasattr(self, "conv_ctrl_stack"):
@@ -4992,19 +5026,20 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         self._conv_last_ts = now
 
         signed_vel = float(self.conveyor_direction) * float(self.conveyor_speed_mps)
-        items = getattr(self, "vpp_conveyor_items", None) or []
-        ys = [float(it["pose"][1]) for it in items if it.get("pose")]
-        if self.vpp_orange_pose is not None:
-            ys.append(float(self.vpp_orange_pose[1]))
-        if self.vpp_green_pose is not None:
-            ys.append(float(self.vpp_green_pose[1]))
+        # In Manual mode, NEVER auto-stop conveyor when parts enter Pick Boundary or reach edges;
+        # operator controls Tiến / Lùi / Dừng manually until clicked Stop.
+        if self.vpp_run_mode == "auto":
+            items = getattr(self, "vpp_conveyor_items", None) or []
+            ys = [float(it["pose"][1]) for it in items if it.get("pose")]
+            if self.vpp_orange_pose is not None:
+                ys.append(float(self.vpp_orange_pose[1]))
+            if self.vpp_green_pose is not None:
+                ys.append(float(self.vpp_green_pose[1]))
 
-        if self.conveyor_direction > 0:
-            # Front drop-off safety edge near wooden board Y=-0.30
-            if any(-0.338 <= y <= -0.28 for y in ys):
-                self.toggle_conveyor_feeder(False)
-                return
-            if self.vpp_run_mode == "auto":
+            if self.conveyor_direction > 0:
+                if any(-0.338 <= y <= -0.28 for y in ys):
+                    self.toggle_conveyor_feeder(False)
+                    return
                 orange_ready = self.vpp_orange_pose is not None and -0.405 <= self.vpp_orange_pose[1] <= -0.325
                 green_ready = self.vpp_green_pose is not None and -0.405 <= self.vpp_green_pose[1] <= -0.325
                 if orange_ready or green_ready:
@@ -5014,11 +5049,10 @@ class TeachPendantApp(QtWidgets.QMainWindow):
                 if self.vision_box_ts > 0.0 and (now - self.vision_box_ts) < 1.5 and not waiting_any:
                     self.toggle_conveyor_feeder(False)
                     return
-        else:
-            # Back belt edge safety stop when reversing
-            if any(y <= -0.90 for y in ys):
-                self.toggle_conveyor_feeder(False)
-                return
+            else:
+                if any(y <= -0.90 for y in ys):
+                    self.toggle_conveyor_feeder(False)
+                    return
 
         # Re-publish belt velocity gently at 10 Hz for TrackController smoothness
         if (now - getattr(self, "_conv_last_pub_ts", 0.0)) >= 0.10:
@@ -5085,9 +5119,9 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         speed_factor = max(0.25, self.speed_slider.value() / 100.0)
         self.vpp_arc_dur = max(1.6, dist_xy / (0.20 * speed_factor))
 
-    def _launch_vpp_cycle(self, box, kind, place_pose):
+    def _launch_vpp_cycle(self, box, kind, place_pose, dims_override=None):
         bx, by, bz, yaw_box = [float(v) for v in box[:4]]
-        dims = getattr(self, "vision_box_dims", None)
+        dims = dims_override if (dims_override and len(dims_override) >= 3) else getattr(self, "vision_box_dims", None)
         box_h = float(dims[2]) if (dims and len(dims) >= 3) else 0.06
 
         # Auto-enable obstacle sync if Vision obstacle is present (rail mode pushes sync; dynamic uses 30Hz dynamic node)
@@ -5256,30 +5290,48 @@ class TeachPendantApp(QtWidgets.QMainWindow):
             self._step_vpp_auto_monitor()
             return
 
-        # Manual 1-Shot mode: refuse while conveyor is running, otherwise pick selected in-zone workpiece
+        # Manual 1-Shot mode: refuse only if conveyor moving or no workpiece visible anywhere in Camera D435
         if self.conveyor_running:
             QtWidgets.QMessageBox.warning(
                 self, "Băng tải đang chạy",
                 "Không thể gắp khi băng tải vẫn đang hoạt động!\n"
-                "Hãy bấm '⏸ Dừng Băng Tải' trước khi gắp."
+                "Hãy bấm '⏹ Dừng' băng tải trước khi gắp."
             )
             return
         self.vpp_auto_armed = False
         chosen_kind = self.vpp_active_target_kind or "manual"
         box = None
-        if self.vpp_manual_target_pref == "orange_cube" and self.vpp_orange_pose and self._is_in_pick_boundary(*self.vpp_orange_pose[:2]):
+        selected_dims = getattr(self, "vision_box_dims", None)
+
+        det_items = getattr(self, "vpp_detected_items", None) or []
+        picked_it = None
+        if det_items:
+            sel_id = getattr(self, "vpp_selected_part_id", None)
+            for it in det_items:
+                if sel_id is not None and int(it.get("id", -1)) == int(sel_id):
+                    picked_it = it
+                    break
+            if picked_it is None:
+                picked_it = det_items[0]
+
+        if picked_it is not None and picked_it.get("pose"):
+            box = picked_it["pose"]
+            chosen_kind = picked_it.get("kind", "orange_cube")
+            if picked_it.get("dims"):
+                selected_dims = picked_it["dims"]
+        elif self.vpp_orange_pose:
             box = self.vpp_orange_pose
             chosen_kind = "orange_cube"
-        elif self.vpp_manual_target_pref == "green_cyl" and self.vpp_green_pose and self._is_in_pick_boundary(*self.vpp_green_pose[:2]):
+        elif self.vpp_green_pose:
             box = self.vpp_green_pose
             chosen_kind = "green_cyl"
-        elif self.vision_box_pose and (time.monotonic() - self.vision_box_ts) <= 3.0 and self._is_in_pick_boundary(*self.vision_box_pose[:2]):
+        elif self.vision_box_pose and (time.monotonic() - self.vision_box_ts) <= 3.0:
             box = self.vision_box_pose
         else:
             QtWidgets.QMessageBox.warning(
-                self, "Chưa có phôi trong Ô gắp",
-                "Không có phôi nào đang nằm bên trong ranh giới Ô gắp trên băng tải (Y = -0.495..-0.295).\n"
-                "Hãy bấm '🏭 Chạy Băng Tải' để đưa phôi vào đúng ranh giới Ô gắp trước!"
+                self, "Chưa thấy phôi trong Camera D435",
+                "Camera D435 hiện chưa nhận diện được phôi nào.\n"
+                "Hãy kiểm tra Vision đã bật hoặc bấm '➕ 2. Thêm Phôi' / '🔄 1. Reset Phôi'."
             )
             return
         if not self.place_pose_taught:
@@ -5290,8 +5342,7 @@ class TeachPendantApp(QtWidgets.QMainWindow):
             )
             return
 
-        dims = getattr(self, "vision_box_dims", None)
-        box_h = float(dims[2]) if (dims and len(dims) >= 3) else 0.06
+        box_h = float(selected_dims[2]) if (selected_dims and len(selected_dims) >= 3) else 0.06
         if box_h < 0.045:
             ans = QtWidgets.QMessageBox.question(
                 self, "Cảnh báo phôi có thể đang bị đổ",
@@ -5303,7 +5354,7 @@ class TeachPendantApp(QtWidgets.QMainWindow):
             if ans != QtWidgets.QMessageBox.Yes:
                 return
 
-        self._launch_vpp_cycle(box, chosen_kind, self.place_pose_taught)
+        self._launch_vpp_cycle(box, chosen_kind, self.place_pose_taught, dims_override=selected_dims)
 
     def stop_vision_pick_place(self):
         self.vpp_active = False
