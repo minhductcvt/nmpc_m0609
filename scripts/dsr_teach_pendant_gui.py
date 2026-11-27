@@ -13,6 +13,7 @@ import math
 import time
 import shlex
 import subprocess
+import threading
 from pathlib import Path
 
 # PyQt5 imports
@@ -28,13 +29,15 @@ except ImportError:
 
 try:
     import gz.transport13 as gz_transport
-    from gz.msgs10 import pose_pb2, boolean_pb2, double_pb2
+    from gz.msgs10 import pose_pb2, boolean_pb2, double_pb2, entity_factory_pb2, entity_pb2
     HAVE_GZ_TRANSPORT = True
 except ImportError:
     gz_transport = None
     pose_pb2 = None
     boolean_pb2 = None
     double_pb2 = None
+    entity_factory_pb2 = None
+    entity_pb2 = None
     HAVE_GZ_TRANSPORT = False
 
 # ROS 2 imports (graceful fallback if running offline)
@@ -1748,9 +1751,12 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         self.vpp_auto_armed = False
         self.vpp_conveyor_autofeed = True
         self.conveyor_running = False
+        self.conveyor_direction = 1     # +1 = Tiến (+Y), -1 = Lùi (-Y)
         self.conveyor_speed_mps = 0.09
         self._conv_last_ts = 0.0
         self._conv_last_pub_ts = 0.0
+        self.spawned_workpiece_names = []
+        self._spawn_counter = 0
         self.vpp_dwell_sec = 3.0
         self._last_vpp_phase_msg = ""
         self.gz_node = gz_transport.Node() if HAVE_GZ_TRANSPORT else None
@@ -2736,8 +2742,8 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         r_outer.setContentsMargins(0, 0, 0, 0)
         r_outer.setSpacing(6)
 
-        # Section 1: ALL Detected Workpieces on Conveyor + Conveyor Feed Control + 2x2 Slots
-        obj_box = QtWidgets.QGroupBox("1. Phôi Nhận Diện Trên Băng Tải (Camera D435) & Ô 2×2")
+        # Section 1: Pure Workpiece Recognition & Selection (Camera D435)
+        obj_box = QtWidgets.QGroupBox("1. Nhận Diện & Chọn Phôi (Camera D435)")
         ob_lay = QtWidgets.QVBoxLayout(obj_box)
         ob_lay.setContentsMargins(8, 8, 8, 6)
         ob_lay.setSpacing(4)
@@ -2794,24 +2800,13 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         self.lbl_vpp_tray_counts.setStyleSheet("color: #FDE047; font-weight: bold; font-family: monospace; font-size: 10px;")
         self.lbl_vpp_obs_summary = _fix_label(QtWidgets.QLabel("🟡 Cản Vàng: --- | Chưa quét"), fixed_h=18)
         self.lbl_vpp_obs_summary.setStyleSheet("font-family: monospace; font-size: 10px; color: #FACC15;")
-
-        self.btn_vpp_conveyor = QtWidgets.QPushButton("🏭 Chạy Băng Tải (Đưa vào Ô gắp)")
-        self.btn_vpp_conveyor.setCheckable(True)
-        self.btn_vpp_conveyor.setStyleSheet(
-            "QPushButton { background: #0369A1; color: white; font-weight: bold; padding: 4px 8px; border-radius: 5px; font-size: 10px; }"
-            "QPushButton:checked { background: #059669; color: #ECFDF5; border: 1px solid #34D399; }"
-            "QPushButton:hover { background: #0284C7; }"
-        )
-        self.btn_vpp_conveyor.clicked.connect(self.toggle_conveyor_feeder)
-
-        btn_rst_tray = QtWidgets.QPushButton("🔄 Reset Ô & Phôi")
-        btn_rst_tray.setStyleSheet("background: #0F766E; color: white; font-weight: bold; padding: 3px 8px; font-size: 10px; border-radius: 4px;")
-        btn_rst_tray.clicked.connect(self.reset_target_box_pose)
+        self.lbl_vpp_spawn_count = _fix_label(QtWidgets.QLabel("📦 Phôi trên băng tải: 2 gốc (+0 thêm)"), fixed_h=18)
+        self.lbl_vpp_spawn_count.setStyleSheet("font-family: monospace; font-size: 10px; color: #94A3B8;")
 
         esc_lay.addWidget(self.lbl_vpp_tray_counts)
         esc_lay.addWidget(self.lbl_vpp_obs_summary)
-        esc_lay.addWidget(self.btn_vpp_conveyor)
-        esc_lay.addWidget(btn_rst_tray)
+        esc_lay.addWidget(self.lbl_vpp_spawn_count)
+        esc_lay.addStretch()
         obj_row.addWidget(ext_sel_card, stretch=2)
 
         ob_lay.addLayout(obj_row)
@@ -2956,6 +2951,108 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         ex_lay.addWidget(self.vpp_progress)
 
         r_outer.addWidget(exec_box)
+
+        # Section 4: Bottom Conveyor Drive (Auto vs Manual Tiến/Lùi) & Workpiece Management (1. Reset | 2. Thêm Phôi)
+        conv_box = QtWidgets.QGroupBox("4. Điều Khiển Băng Tải & Quản Lý Phôi (Reset / Thêm Phôi)")
+        cb_lay = QtWidgets.QVBoxLayout(conv_box)
+        cb_lay.setContentsMargins(8, 8, 8, 6)
+        cb_lay.setSpacing(6)
+
+        conv_top = QtWidgets.QHBoxLayout()
+        conv_top.setSpacing(6)
+
+        self.conv_ctrl_stack = QtWidgets.QStackedWidget()
+        self.conv_ctrl_stack.setFixedHeight(32)
+
+        # Page 0 (Auto): Single smart forward toggle button
+        w_auto_conv = QtWidgets.QWidget()
+        wac_lay = QtWidgets.QHBoxLayout(w_auto_conv)
+        wac_lay.setContentsMargins(0, 0, 0, 0)
+        self.btn_vpp_conveyor = QtWidgets.QPushButton("🏭 Chạy Băng Tải (Đưa vào Ô gắp)")
+        self.btn_vpp_conveyor.setCheckable(True)
+        self.btn_vpp_conveyor.setStyleSheet(
+            "QPushButton { background: #0369A1; color: white; font-weight: bold; padding: 5px 10px; border-radius: 5px; font-size: 10px; }"
+            "QPushButton:checked { background: #059669; color: #ECFDF5; border: 1px solid #34D399; }"
+            "QPushButton:hover { background: #0284C7; }"
+        )
+        self.btn_vpp_conveyor.clicked.connect(lambda ck: self.toggle_conveyor_feeder(ck, direction=1))
+        wac_lay.addWidget(self.btn_vpp_conveyor)
+        self.conv_ctrl_stack.addWidget(w_auto_conv)
+
+        # Page 1 (Manual): Lùi | Dừng | Tiến controls
+        w_man_conv = QtWidgets.QWidget()
+        wmc_lay = QtWidgets.QHBoxLayout(w_man_conv)
+        wmc_lay.setContentsMargins(0, 0, 0, 0)
+        wmc_lay.setSpacing(5)
+        self.btn_vpp_conv_rev = QtWidgets.QPushButton("◀ Lùi Băng Tải")
+        self.btn_vpp_conv_rev.setCheckable(True)
+        self.btn_vpp_conv_rev.setStyleSheet(
+            "QPushButton { background: #7C2D12; color: #FED7AA; font-weight: bold; padding: 5px 8px; border-radius: 5px; font-size: 10px; }"
+            "QPushButton:checked { background: #EA580C; color: white; border: 1px solid #FDBA74; }"
+        )
+        self.btn_vpp_conv_rev.clicked.connect(lambda: self.toggle_conveyor_direction(-1))
+        wmc_lay.addWidget(self.btn_vpp_conv_rev, stretch=1)
+
+        self.btn_vpp_conv_stop = QtWidgets.QPushButton("⏹ Dừng")
+        self.btn_vpp_conv_stop.setStyleSheet(
+            "QPushButton { background: #334155; color: #F8FAFC; font-weight: bold; padding: 5px 10px; border-radius: 5px; font-size: 10px; }"
+            "QPushButton:hover { background: #475569; }"
+        )
+        self.btn_vpp_conv_stop.clicked.connect(lambda: self.toggle_conveyor_feeder(False))
+        wmc_lay.addWidget(self.btn_vpp_conv_stop)
+
+        self.btn_vpp_conv_fwd = QtWidgets.QPushButton("▶ Tiến Băng Tải")
+        self.btn_vpp_conv_fwd.setCheckable(True)
+        self.btn_vpp_conv_fwd.setStyleSheet(
+            "QPushButton { background: #0369A1; color: white; font-weight: bold; padding: 5px 8px; border-radius: 5px; font-size: 10px; }"
+            "QPushButton:checked { background: #059669; color: #ECFDF5; border: 1px solid #34D399; }"
+        )
+        self.btn_vpp_conv_fwd.clicked.connect(lambda: self.toggle_conveyor_direction(1))
+        wmc_lay.addWidget(self.btn_vpp_conv_fwd, stretch=1)
+        self.conv_ctrl_stack.addWidget(w_man_conv)
+
+        conv_top.addWidget(self.conv_ctrl_stack, stretch=2)
+
+        self.lbl_vpp_conv_dir = _fix_label(QtWidgets.QLabel("⏹ Băng tải: Đang dừng"), fixed_h=18)
+        self.lbl_vpp_conv_dir.setFixedWidth(150)
+        self.lbl_vpp_conv_dir.setStyleSheet("font-family: monospace; font-size: 10px; font-weight: bold; color: #94A3B8;")
+        conv_top.addWidget(self.lbl_vpp_conv_dir)
+        cb_lay.addLayout(conv_top)
+
+        # Row 2: 2 options (1. Reset [giữ 2 phôi gốc] | 2. Thêm Phôi Vuông/Trụ ở đầu kia băng tải)
+        part_row = QtWidgets.QHBoxLayout()
+        part_row.setSpacing(6)
+        self.cmb_spawn_shape = QtWidgets.QComboBox()
+        self.cmb_spawn_shape.addItems([
+            "🟧 Thêm: Vuông Cam (6×6×6)",
+            "🟢 Thêm: Trụ Xanh (Ø6×6)",
+        ])
+        self.cmb_spawn_shape.setStyleSheet(
+            "background: #101726; color: #F8FAFC; border: 1px solid #334155; "
+            "border-radius: 4px; padding: 4px 6px; font-size: 10px; font-weight: bold;"
+        )
+        part_row.addWidget(self.cmb_spawn_shape, stretch=2)
+
+        self.btn_vpp_add_part = QtWidgets.QPushButton("➕ 2. Thêm Phôi")
+        self.btn_vpp_add_part.setToolTip("Thả thêm phôi mới ở phía đầu vào băng tải (cao ≥ 2× chiều cao phôi để tránh chồng)")
+        self.btn_vpp_add_part.setStyleSheet(
+            "QPushButton { background: #1D4ED8; color: white; font-weight: bold; padding: 5px 10px; border-radius: 5px; font-size: 10px; }"
+            "QPushButton:hover { background: #2563EB; }"
+        )
+        self.btn_vpp_add_part.clicked.connect(lambda: self.spawn_additional_workpiece())
+        part_row.addWidget(self.btn_vpp_add_part, stretch=1)
+
+        self.btn_vpp_reset_parts = QtWidgets.QPushButton("🔄 1. Reset Phôi")
+        self.btn_vpp_reset_parts.setToolTip("Xóa toàn bộ phôi đã thêm và đặt lại đúng 2 phôi gốc ban đầu + làm mới Ô 2×2")
+        self.btn_vpp_reset_parts.setStyleSheet(
+            "QPushButton { background: #0F766E; color: white; font-weight: bold; padding: 5px 10px; border-radius: 5px; font-size: 10px; }"
+            "QPushButton:hover { background: #0D9488; }"
+        )
+        self.btn_vpp_reset_parts.clicked.connect(self.reset_target_box_pose)
+        part_row.addWidget(self.btn_vpp_reset_parts, stretch=1)
+        cb_lay.addLayout(part_row)
+
+        r_outer.addWidget(conv_box)
         r_outer.addStretch()
         layout.addWidget(right_col, stretch=5)
         return w
@@ -3911,9 +4008,100 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         self.btn_pause.setStyleSheet("padding: 7px 12px; font-weight: bold; background: #D97706; color: white;")
         self.update_tracker_display()
 
-    def reset_target_box_pose(self):
-        """Reset orange cube, green cylinder on conveyor feeder, rail obstacle, and 2x2 slot counters."""
+    @staticmethod
+    def _build_workpiece_sdf(model_name: str, kind: str, x: float, y: float, z_world: float) -> str:
+        """Build standalone SDF XML for an extra 6cm orange cube or green cylinder spawned at conveyor infeed."""
+        if kind == "green_cyl":
+            geom = "<cylinder><radius>0.030</radius><length>0.060</length></cylinder>"
+            inert = "<ixx>0.000063</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.000063</iyy><iyz>0</iyz><izz>0.000054</izz>"
+            mat = "<ambient>0.05 0.65 0.22 1</ambient><diffuse>0.08 0.85 0.30 1</diffuse>"
+            link_name = "cyl_link"
+        else:
+            geom = "<box><size>0.06 0.06 0.06</size></box>"
+            inert = "<ixx>0.000072</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.000072</iyy><iyz>0</iyz><izz>0.000072</izz>"
+            mat = "<ambient>0.92 0.18 0.01 1</ambient><diffuse>1.0 0.16 0.01 1</diffuse>"
+            link_name = "box_link"
+        return (
+            f'<?xml version="1.0"?><sdf version="1.8"><model name="{model_name}">'
+            f"<pose>{x:.4f} {y:.4f} {z_world:.4f} 0 0 0</pose>"
+            f'<link name="{link_name}">'
+            f"<inertial><mass>0.12</mass><inertia>{inert}</inertia></inertial>"
+            f'<collision name="collision"><geometry>{geom}</geometry>'
+            "<surface><friction><ode><mu>1.5</mu><mu2>1.5</mu2></ode></friction>"
+            "<bounce><restitution_coefficient>0.0</restitution_coefficient></bounce>"
+            "<contact><ode><kp>1000000.0</kp><kd>100.0</kd><max_vel>0.01</max_vel><min_depth>0.001</min_depth></ode></contact>"
+            "</surface></collision>"
+            f'<visual name="visual"><geometry>{geom}</geometry><material>{mat}</material></visual>'
+            "</link></model></sdf>"
+        )
+
+    def _update_spawn_count_ui(self):
+        n_extra = len(getattr(self, "spawned_workpiece_names", []))
+        if hasattr(self, "lbl_vpp_spawn_count"):
+            self.lbl_vpp_spawn_count.setText(f"📦 Phôi trên băng tải: 2 gốc (+{n_extra} thêm)")
+
+    def spawn_additional_workpiece(self, kind=None):
+        """Spawn an extra orange cube or green cylinder at the conveyor far end (Z >= 2x height clear)."""
+        if kind is None:
+            idx = self.cmb_spawn_shape.currentIndex() if hasattr(self, "cmb_spawn_shape") else 0
+            kind = "green_cyl" if idx == 1 else "orange_cube"
+        self._spawn_counter += 1
+        model_name = f"spawned_{kind}_{self._spawn_counter}"
+        # Far infeed end of conveyor (Y: -0.95..-0.30) and elevated Z=0.905m (bottom 12.5cm > 2x6cm above belt)
+        lane_x = (0.45, 0.39, 0.51)[(self._spawn_counter - 1) % 3]
+        spawn_y = -0.85
+        spawn_z = 0.905
+        sdf_xml = self._build_workpiece_sdf(model_name, kind, lane_x, spawn_y, spawn_z)
+        self.spawned_workpiece_names.append(model_name)
+        self._update_spawn_count_ui()
+
         wname = "m0609_dynamic_obstacle_world" if self.sim_scenario == "dynamic" else "m0609_rail_world"
+        if entity_factory_pb2 is not None and boolean_pb2 is not None and HAVE_GZ_TRANSPORT:
+            def _do_create():
+                try:
+                    n = self.gz_node or gz_transport.Node()
+                    req = entity_factory_pb2.EntityFactory()
+                    req.sdf = sdf_xml
+                    req.name = model_name
+                    n.request(f"/world/{wname}/create", req, entity_factory_pb2.EntityFactory, boolean_pb2.Boolean, 1500)
+                except Exception:
+                    pass
+            threading.Thread(target=_do_create, daemon=True).start()
+
+        tag = "Trụ Xanh" if kind == "green_cyl" else "Vuông Cam"
+        if hasattr(self, "lbl_vpp_phase") and not self.vpp_active:
+            self._vpp_set_phase_ui(
+                f"➕ Đã thêm {tag} tại đầu kia băng tải [{lane_x:.2f}, {spawn_y:.2f}, Z={spawn_z:.3f}m].",
+                0, "#38BDF8"
+            )
+        return model_name
+
+    def reset_target_box_pose(self):
+        """Remove all spawned extra workpieces, restore ONLY the 2 initial workpieces + obstacle, and reset 2x2 counters."""
+        if getattr(self, "conveyor_running", False):
+            self.toggle_conveyor_feeder(False)
+        else:
+            self._publish_conveyor_velocity(0.0)
+
+        wname = "m0609_dynamic_obstacle_world" if self.sim_scenario == "dynamic" else "m0609_rail_world"
+        to_remove = list(getattr(self, "spawned_workpiece_names", []))
+        self.spawned_workpiece_names.clear()
+        self._spawn_counter = 0
+        self._update_spawn_count_ui()
+
+        if to_remove and entity_pb2 is not None and boolean_pb2 is not None and HAVE_GZ_TRANSPORT:
+            def _do_remove():
+                try:
+                    n = self.gz_node or gz_transport.Node()
+                    for mname in to_remove:
+                        rem = entity_pb2.Entity()
+                        rem.name = str(mname)
+                        rem.type = entity_pb2.Entity.MODEL
+                        n.request(f"/world/{wname}/remove", rem, entity_pb2.Entity, boolean_pb2.Boolean, 1000)
+                except Exception:
+                    pass
+            threading.Thread(target=_do_remove, daemon=True).start()
+
         reqs = [
             f"gz service -s /world/{wname}/set_pose --reqtype gz.msgs.Pose --reptype gz.msgs.Boolean --timeout 1500 --req 'name: \"target_orange_cube\", position: {{x: 0.45, y: -0.38, z: 0.781}}, orientation: {{x: 0.0, y: 0.0, z: 0.0, w: 1.0}}'",
             f"gz service -s /world/{wname}/set_pose --reqtype gz.msgs.Pose --reptype gz.msgs.Boolean --timeout 1500 --req 'name: \"target_green_cyl\", position: {{x: 0.45, y: -0.58, z: 0.781}}, orientation: {{x: 0.0, y: 0.0, z: 0.0, w: 1.0}}'",
@@ -3924,22 +4112,16 @@ class TeachPendantApp(QtWidgets.QMainWindow):
             )
         cmd = self._build_ros_shell_cmd(" ; ".join(reqs))
         subprocess.Popen(cmd, shell=True)
-        self.conveyor_running = False
-        self._publish_conveyor_velocity(0.0)
-        if hasattr(self, "btn_vpp_conveyor"):
-            self.btn_vpp_conveyor.blockSignals(True)
-            self.btn_vpp_conveyor.setChecked(False)
-            self.btn_vpp_conveyor.setText("🏭 Chạy Băng Tải (Đưa vào Ô gắp)")
-            self.btn_vpp_conveyor.blockSignals(False)
         self.vpp_auto_orange_idx = 0
         self.vpp_auto_green_idx = 0
         self.vpp_stable_pose = None
         if hasattr(self, "lbl_vpp_tray_counts"):
             self._update_vpp_tray_counts_ui()
-        QtWidgets.QMessageBox.information(
-            self, "Reset Phôi & Ô 2×2",
-            "✓ Đã đặt lại Phôi Vuông Cam (6×6×6cm) & Trụ Xanh (Ø6×6cm) lên băng tải và làm mới bộ đếm Ô 2×2!"
-        )
+        if hasattr(self, "lbl_vpp_phase") and not self.vpp_active:
+            self._vpp_set_phase_ui(
+                f"🔄 Đã Reset (xóa {len(to_remove)} phôi thêm, chỉ giữ 2 phôi gốc & làm mới Ô 2×2).",
+                0, "#34D399"
+            )
 
     def execute_current_step(self):
         if len(self.program_steps) == 0:
@@ -4676,6 +4858,10 @@ class TeachPendantApp(QtWidgets.QMainWindow):
 
     def _on_vpp_run_mode_changed(self, mode):
         self.vpp_run_mode = "auto" if mode == "auto" else "manual"
+        if getattr(self, "conveyor_running", False):
+            self.toggle_conveyor_feeder(False)
+        if hasattr(self, "conv_ctrl_stack"):
+            self.conv_ctrl_stack.setCurrentIndex(1 if self.vpp_run_mode == "manual" else 0)
         if hasattr(self, "chk_vpp_autofeed"):
             self.chk_vpp_autofeed.setEnabled(self.vpp_run_mode == "auto")
         if self.vpp_run_mode == "manual":
@@ -4686,7 +4872,7 @@ class TeachPendantApp(QtWidgets.QMainWindow):
                 self.btn_vpp_start.setEnabled(True)
             if not self.vpp_active and hasattr(self, "lbl_vpp_phase"):
                 self._vpp_set_phase_ui(
-                    "🖐️ Chế độ MANUAL 1 lần: Hãy Jog vào vùng trống & bấm Xác Nhận Điểm Đặt trước khi chạy.",
+                    "🖐️ Chế độ MANUAL 1 lần: Chạy Tiến/Lùi băng tải (4), Jog vào vùng trống & bấm Xác Nhận Điểm Đặt.",
                     0, "#38BDF8"
                 )
         else:
@@ -4735,7 +4921,50 @@ class TeachPendantApp(QtWidgets.QMainWindow):
             except Exception:
                 pass
 
-    def toggle_conveyor_feeder(self, checked=None):
+    def _sync_conveyor_ui(self):
+        running = bool(self.conveyor_running)
+        fwd_active = running and self.conveyor_direction > 0
+        rev_active = running and self.conveyor_direction < 0
+        if hasattr(self, "btn_vpp_conveyor"):
+            self.btn_vpp_conveyor.blockSignals(True)
+            self.btn_vpp_conveyor.setChecked(running)
+            self.btn_vpp_conveyor.setText(
+                "⏸ Dừng Băng Tải (Đang chạy ▶)" if running
+                else "🏭 Chạy Băng Tải (Đưa vào Ô gắp)"
+            )
+            self.btn_vpp_conveyor.blockSignals(False)
+        if hasattr(self, "btn_vpp_conv_fwd"):
+            self.btn_vpp_conv_fwd.blockSignals(True)
+            self.btn_vpp_conv_fwd.setChecked(fwd_active)
+            self.btn_vpp_conv_fwd.blockSignals(False)
+        if hasattr(self, "btn_vpp_conv_rev"):
+            self.btn_vpp_conv_rev.blockSignals(True)
+            self.btn_vpp_conv_rev.setChecked(rev_active)
+            self.btn_vpp_conv_rev.blockSignals(False)
+        if hasattr(self, "lbl_vpp_conv_dir"):
+            if fwd_active:
+                self.lbl_vpp_conv_dir.setText(f"▶ Tiến (+{self.conveyor_speed_mps:.2f} m/s)")
+                self.lbl_vpp_conv_dir.setStyleSheet("font-family: monospace; font-size: 10px; font-weight: bold; color: #34D399;")
+            elif rev_active:
+                self.lbl_vpp_conv_dir.setText(f"◀ Lùi (-{self.conveyor_speed_mps:.2f} m/s)")
+                self.lbl_vpp_conv_dir.setStyleSheet("font-family: monospace; font-size: 10px; font-weight: bold; color: #FB923C;")
+            else:
+                self.lbl_vpp_conv_dir.setText("⏹ Băng tải: Đang dừng")
+                self.lbl_vpp_conv_dir.setStyleSheet("font-family: monospace; font-size: 10px; font-weight: bold; color: #94A3B8;")
+
+    def toggle_conveyor_direction(self, direction: int):
+        """Manual conveyor forward (+1) / reverse (-1) button toggle."""
+        d = 1 if int(direction) >= 0 else -1
+        if self.conveyor_running and self.conveyor_direction == d:
+            self.toggle_conveyor_feeder(False)
+        else:
+            self.toggle_conveyor_feeder(True, direction=d)
+
+    def toggle_conveyor_feeder(self, checked=None, direction=None):
+        if direction is not None:
+            self.conveyor_direction = 1 if int(direction) >= 0 else -1
+        elif checked is None and not self.conveyor_running:
+            self.conveyor_direction = 1
         if checked is None:
             self.conveyor_running = not self.conveyor_running
         else:
@@ -4745,17 +4974,10 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         if self.conveyor_running:
             self.vpp_stable_pose = None
             self.vpp_stable_ts = 0.0
-            self._publish_conveyor_velocity(self.conveyor_speed_mps)
+            self._publish_conveyor_velocity(float(self.conveyor_direction) * float(self.conveyor_speed_mps))
         else:
             self._publish_conveyor_velocity(0.0)
-        if hasattr(self, "btn_vpp_conveyor"):
-            self.btn_vpp_conveyor.blockSignals(True)
-            self.btn_vpp_conveyor.setChecked(self.conveyor_running)
-            self.btn_vpp_conveyor.setText(
-                "⏸ Dừng Băng Tải (Đang chạy ▶)" if self.conveyor_running
-                else "🏭 Chạy Băng Tải (Đưa vào Ô gắp)"
-            )
-            self.btn_vpp_conveyor.blockSignals(False)
+        self._sync_conveyor_ui()
 
     def _step_conveyor_feeder(self):
         if not self.conveyor_running:
@@ -4769,35 +4991,46 @@ class TeachPendantApp(QtWidgets.QMainWindow):
             return
         self._conv_last_ts = now
 
-        # Auto-stop smoothly via TrackController once a workpiece settles well inside the Pick Boundary (y >= -0.405)
-        orange_ready = self.vpp_orange_pose is not None and -0.405 <= self.vpp_orange_pose[1] <= -0.325
-        green_ready = self.vpp_green_pose is not None and -0.405 <= self.vpp_green_pose[1] <= -0.325
-        edge_safety = (
-            (self.vpp_orange_pose is not None and -0.340 <= self.vpp_orange_pose[1] <= -0.28)
-            or (self.vpp_green_pose is not None and -0.340 <= self.vpp_green_pose[1] <= -0.28)
-        )
-        if orange_ready or green_ready or edge_safety:
-            self.toggle_conveyor_feeder(False)
-            return
+        signed_vel = float(self.conveyor_direction) * float(self.conveyor_speed_mps)
+        items = getattr(self, "vpp_conveyor_items", None) or []
+        ys = [float(it["pose"][1]) for it in items if it.get("pose")]
+        if self.vpp_orange_pose is not None:
+            ys.append(float(self.vpp_orange_pose[1]))
+        if self.vpp_green_pose is not None:
+            ys.append(float(self.vpp_green_pose[1]))
 
-        # Safety stop if Vision is actively streaming and confirmed no waiting part remains on belt
-        waiting_orange = self.vpp_orange_pose is not None and -0.78 <= self.vpp_orange_pose[1] < -0.345
-        waiting_green = self.vpp_green_pose is not None and -0.78 <= self.vpp_green_pose[1] < -0.345
-        if self.vision_box_ts > 0.0 and (now - self.vision_box_ts) < 1.5 and not (waiting_orange or waiting_green):
-            self.toggle_conveyor_feeder(False)
-            return
+        if self.conveyor_direction > 0:
+            # Front drop-off safety edge near wooden board Y=-0.30
+            if any(-0.338 <= y <= -0.28 for y in ys):
+                self.toggle_conveyor_feeder(False)
+                return
+            if self.vpp_run_mode == "auto":
+                orange_ready = self.vpp_orange_pose is not None and -0.405 <= self.vpp_orange_pose[1] <= -0.325
+                green_ready = self.vpp_green_pose is not None and -0.405 <= self.vpp_green_pose[1] <= -0.325
+                if orange_ready or green_ready:
+                    self.toggle_conveyor_feeder(False)
+                    return
+                waiting_any = any(-0.92 <= y < -0.345 for y in ys)
+                if self.vision_box_ts > 0.0 and (now - self.vision_box_ts) < 1.5 and not waiting_any:
+                    self.toggle_conveyor_feeder(False)
+                    return
+        else:
+            # Back belt edge safety stop when reversing
+            if any(y <= -0.90 for y in ys):
+                self.toggle_conveyor_feeder(False)
+                return
 
         # Re-publish belt velocity gently at 10 Hz for TrackController smoothness
         if (now - getattr(self, "_conv_last_pub_ts", 0.0)) >= 0.10:
-            self._publish_conveyor_velocity(self.conveyor_speed_mps)
+            self._publish_conveyor_velocity(signed_vel)
             self._conv_last_pub_ts = now
 
     def _feed_next_conveyor_part(self):
-        """Start smooth belt movement so the next waiting workpiece enters the Pick Boundary."""
+        """Start smooth forward belt movement so the next waiting workpiece enters the Pick Boundary."""
         waiting_green = self.vpp_auto_green_idx < 2 and self.vpp_green_pose and self.vpp_green_pose[1] < -0.405
         waiting_orange = self.vpp_auto_orange_idx < 2 and self.vpp_orange_pose and self.vpp_orange_pose[1] < -0.405
         if waiting_green or waiting_orange:
-            self.toggle_conveyor_feeder(True)
+            self.toggle_conveyor_feeder(True, direction=1)
 
     def _vpp_target_place_j6(self, pick_j6=0.0):
         base_pose = self.vpp_cycle_place_pose or self.place_pose_taught

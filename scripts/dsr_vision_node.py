@@ -626,7 +626,7 @@ class DsrVisionNode(Node):
                 dims_3d = [bw, bd, bh]
 
                 in_pick_zone = (0.305 <= bx <= 0.595) and (-0.465 <= by <= -0.325)
-                in_conveyor = (0.22 <= bx <= 0.68) and (-0.78 <= by <= -0.24)
+                in_conveyor = (0.22 <= bx <= 0.68) and (-0.95 <= by <= -0.24)
                 status_tag = " [TRONG O GAP]" if in_pick_zone else (" [CHO BANG TAI]" if in_conveyor else " [DA XEP]")
                 draw_col = det.color_bgr if in_pick_zone else (160, 160, 160)
                 cv2.drawContours(debug_img, [det.contour], -1, draw_col, 2)
