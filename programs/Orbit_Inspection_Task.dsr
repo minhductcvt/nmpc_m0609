@@ -1,0 +1,37 @@
+[
+  {
+    "id": 1,
+    "type": "MoveJ",
+    "target": "HOME_SAFE",
+    "params": "[0.0, 0.0, 1.5708, 0.0, 1.5708, 0.0]",
+    "desc": "Về điểm Home an toàn"
+  },
+  {
+    "id": 2,
+    "type": "MoveNMPC",
+    "target": "Approach_Apex",
+    "params": "[0.45, 0.0, 0.28]",
+    "desc": "Tiếp cận đỉnh vật cản"
+  },
+  {
+    "id": 3,
+    "type": "RotateCircle",
+    "target": "Full_360_Orbit",
+    "params": "center:[0.45, 0.00], radius:0.14, speed:60.0, turns:1.00, angle:360",
+    "desc": "Quay 1.00 vòng (360°) quanh tâm [0.45, 0.00], R=14cm, V=60°/s"
+  },
+  {
+    "id": 4,
+    "type": "Wait",
+    "target": "DELAY",
+    "params": "1.0",
+    "desc": "Chờ ghi nhận camera"
+  },
+  {
+    "id": 5,
+    "type": "MoveJ",
+    "target": "HOME_SAFE",
+    "params": "[0.0, 0.0, 1.5708, 0.0, 1.5708, 0.0]",
+    "desc": "Về điểm Home an toàn"
+  }
+]

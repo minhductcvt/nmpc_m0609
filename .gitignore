@@ -1,0 +1,15 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C/C++ build artifacts (keep generated .c/.h and solver .so for zero-codegen colcon build)
+*.o
+*.obj
+*.a
+
+# Logs & OS temp
+*.log
+*.tmp
+.DS_Store
+*~

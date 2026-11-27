@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bản Vẽ Thiết Kế Trạm Doosan M0609 (2 Phiên Bản)</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 24px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #0f172a; color: #e2e8f0;
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; }
+    h1 { font-size: 20px; margin: 0 0 6px; color: #f8fafc; }
+    .sub { color: #94a3b8; font-size: 13px; margin-bottom: 14px; }
+    .bar {
+      display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between;
+      padding: 12px 14px; background: #1e293b; border: 1px solid #334155; border-radius: 10px; margin-bottom: 14px;
+    }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    button {
+      padding: 7px 12px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer;
+      border: 1px solid #475569; background: #0f172a; color: #cbd5e1;
+    }
+    button.active { background: #2563eb; border-color: #3b82f6; color: #ffffff; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 14px; }
+    .card {
+      background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 14px;
+    }
+    .card-hdr { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 8px; color: #f1f5f9; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #94a3b8; font-weight: 500; }
+    svg { width: 100%; height: auto; display: block; background: #0b1120; border-radius: 8px; border: 1px solid #1e293b; }
+    .specs {
+      margin-top: 14px; background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 14px; font-size: 13px;
+    }
+    .specs h2 { margin: 0 0 10px; font-size: 15px; color: #f8fafc; }
+    .spec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+    .spec-item { background: #0b1120; border: 1px solid #334155; border-radius: 8px; padding: 10px; line-height: 1.5; }
+    .spec-item b { color: #38bdf8; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Bản Vẽ Thiết Kế Trạm Doosan M0609 + Robotiq 2F-85 + Băng Tải (2 Phiên Bản)</h1>
+    <div class="sub" id="summary-txt">Bản 1 (Mặc định): Thanh ray đặt ngay trục HOME, cách băng tải 30 cm; Trụ Vàng chạy trên ray 40 cm.</div>
+
+    <div class="bar">
+      <div class="btn-group">
+        <button id="btn-v1" class="active">Bản 1: Thanh Ray (Mặc định)</button>
+        <button id="btn-v2-circle">Bản 2A: Vật động Tròn</button>
+        <button id="btn-v2-zigzag">Bản 2B: Vật động Zigzag</button>
+      </div>
+      <div class="btn-group">
+        <button id="btn-pick-mode">Chế độ: Auto (Ô 2×2)</button>
+        <label style="font-size:13px; color:#cbd5e1; cursor:pointer;">
+          <input id="chk-reach" type="checkbox" checked /> Tầm với M0609 (85 cm)
+        </label>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-hdr">
+          <span id="lbl-top-title">BẢN 1 — MẶT BẰNG THANH RAY (Mặc định)</span>
+          <span class="mono">1 cm = 2 px</span>
+        </div>
+        <svg viewBox="0 0 420 270">
+          <defs>
+            <marker id="arr-o" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,1 L10,5 L0,9 z" fill="#f97316" /></marker>
+            <marker id="arr-g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,1 L10,5 L0,9 z" fill="#22c55e" /></marker>
+            <marker id="arr-m" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,1 L10,5 L0,9 z" fill="#38bdf8" /></marker>
+            <marker id="dim-arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9 z" fill="#94a3b8" /></marker>
+          </defs>
+          <rect x="76" y="14" width="150" height="84" rx="5" fill="#1e293b" stroke="#cbd5e1" stroke-width="1.3" />
+          <rect x="90" y="24" width="38" height="38" fill="none" stroke="#eab308" stroke-width="1" stroke-dasharray="2,2" />
+          <line x1="109" y1="24" x2="109" y2="62" stroke="#eab308" stroke-width="0.9" />
+          <line x1="90" y1="43" x2="128" y2="43" stroke="#eab308" stroke-width="0.9" />
+          <text x="109" y="72" text-anchor="middle" fill="#eab308" font-size="6.8">Mẫu 2×2 tủ</text>
+          <text x="148" y="92" text-anchor="middle" fill="#94a3b8" font-size="7.3">Tủ Doosan</text>
+
+          <circle cx="184" cy="78" r="12" fill="#0f172a" stroke="#3b82f6" stroke-width="2" />
+          <circle cx="184" cy="78" r="4.5" fill="#3b82f6" />
+          <text x="184" y="59" text-anchor="middle" fill="#f8fafc" font-size="7.8" font-weight="600">Đế M0609</text>
+
+          <line x1="24" y1="126" x2="244" y2="126" stroke="#94a3b8" stroke-width="0.9" marker-start="url(#dim-arr)" marker-end="url(#dim-arr)" />
+          <text x="134" y="122" text-anchor="middle" fill="#fbbf24" font-size="7.6" font-weight="600">Tấm gỗ 110 cm × 40 cm</text>
+          <rect x="24" y="136" width="220" height="80" rx="2" fill="#78350f" fill-opacity="0.45" stroke="#d97706" stroke-width="1.6" />
+
+          <rect x="246" y="140" width="152" height="72" rx="2" fill="#166534" fill-opacity="0.72" stroke="#22c55e" stroke-width="1.5" />
+          <text x="352" y="154" text-anchor="middle" fill="#86efac" font-size="7.5" font-weight="600">Băng tải xanh</text>
+          <path d="M388,176 H328" stroke="#86efac" stroke-width="1.4" marker-end="url(#arr-g)" />
+          <rect x="250" y="150" width="36" height="52" rx="2" fill="#3b82f6" fill-opacity="0.18" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="3,2" />
+          <text x="268" y="147" text-anchor="middle" fill="#e0f2fe" font-size="6.8" font-weight="600">Vùng quét nhỏ</text>
+          <rect x="256" y="158" width="12" height="12" rx="1" fill="#f97316" stroke="#fff7ed" stroke-width="1" />
+          <circle cx="272" cy="186" r="6" fill="#22c55e" stroke="#f0fdf4" stroke-width="1" />
+
+          <line x1="184" y1="90" x2="184" y2="218" stroke="#38bdf8" stroke-width="1" stroke-dasharray="3,2" opacity="0.6" />
+          <rect x="190" y="140" width="50" height="72" rx="2" fill="#facc15" fill-opacity="0.06" stroke="#94a3b8" stroke-width="0.9" stroke-dasharray="2,2" />
+          <line x1="184" y1="227" x2="244" y2="227" stroke="#38bdf8" stroke-width="1" marker-start="url(#dim-arr)" marker-end="url(#dim-arr)" />
+          <text x="214" y="238" text-anchor="middle" fill="#7dd3fc" font-size="7.3" font-weight="600">~30 cm vùng giữa</text>
+
+          <g id="v1-rail">
+            <rect x="177" y="136" width="14" height="80" rx="1.5" fill="#1e293b" stroke="#cbd5e1" stroke-width="1.2" />
+            <line x1="181" y1="138" x2="181" y2="214" stroke="#94a3b8" stroke-width="1.3" />
+            <line x1="187" y1="138" x2="187" y2="214" stroke="#94a3b8" stroke-width="1.3" />
+            <text x="184" y="250" text-anchor="middle" fill="#fde047" font-size="7.1" font-weight="600">Ray ngay HOME</text>
+          </g>
+          <g id="v2-circle-path" style="display:none;">
+            <circle cx="215" cy="176" r="22" fill="none" stroke="#facc15" stroke-width="1.5" stroke-dasharray="4,2" />
+            <text x="215" y="250" text-anchor="middle" fill="#fde047" font-size="7.1" font-weight="600">Quỹ đạo TRÒN vùng giữa</text>
+          </g>
+          <g id="v2-zigzag-path" style="display:none;">
+            <polyline points="196,148 234,162 196,176 234,190 196,204" fill="none" stroke="#facc15" stroke-width="1.6" stroke-dasharray="4,2" />
+            <text x="215" y="250" text-anchor="middle" fill="#fde047" font-size="7.1" font-weight="600">Quỹ đạo ZIGZAG vùng giữa</text>
+          </g>
+
+          <g id="top-obs" transform="translate(184, 176)">
+            <circle cx="0" cy="0" r="10" fill="#facc15" fill-opacity="0.92" stroke="#713f12" stroke-width="1.4" />
+            <circle cx="0" cy="0" r="2.5" fill="#713f12" />
+          </g>
+
+          <g id="zone-2x2">
+            <rect x="132" y="161" width="30" height="30" fill="none" stroke="#eab308" stroke-width="1.4" />
+            <line x1="147" y1="161" x2="147" y2="191" stroke="#eab308" stroke-width="1" />
+            <line x1="132" y1="176" x2="162" y2="176" stroke="#eab308" stroke-width="1" />
+            <rect x="133.5" y="162.5" width="12" height="12" rx="1" fill="#f97316" fill-opacity="0.7" stroke="#fb923c" stroke-width="0.9" />
+            <rect x="148.5" y="162.5" width="12" height="12" rx="1" fill="#f97316" fill-opacity="0.7" stroke="#fb923c" stroke-width="0.9" />
+            <circle cx="139.5" cy="183.5" r="6" fill="#22c55e" fill-opacity="0.7" stroke="#4ade80" stroke-width="0.9" />
+            <circle cx="154.5" cy="183.5" r="6" fill="#22c55e" fill-opacity="0.7" stroke="#4ade80" stroke-width="0.9" />
+            <text x="147" y="156" text-anchor="middle" fill="#fdba74" font-size="6.8" font-weight="600">Ô 2×2 khít (15×15cm)</text>
+          </g>
+          <g id="zone-manual">
+            <rect x="30" y="142" width="94" height="68" rx="2" fill="#38bdf8" fill-opacity="0.10" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4,2" />
+            <text x="77" y="174" text-anchor="middle" fill="#7dd3fc" font-size="7.8" font-weight="600">VÙNG TRỐNG</text>
+            <text x="77" y="185" text-anchor="middle" fill="#94a3b8" font-size="6.8">(Manual tự chọn)</text>
+          </g>
+
+          <circle id="reach-circle" cx="184" cy="78" r="170" fill="#3b82f6" fill-opacity="0.05" stroke="#38bdf8" stroke-width="1.1" stroke-dasharray="5,3" />
+          <g id="paths-auto">
+            <path d="M262,162 Q216,120 156,166" fill="none" stroke="#f97316" stroke-width="1.8" stroke-dasharray="4,2" marker-end="url(#arr-o)" />
+            <path d="M272,186 Q216,226 156,186" fill="none" stroke="#22c55e" stroke-width="1.8" stroke-dasharray="4,2" marker-end="url(#arr-g)" />
+          </g>
+          <g id="paths-manual" style="display:none;">
+            <path d="M262,168 Q186,102 96,166" fill="none" stroke="#38bdf8" stroke-width="1.9" stroke-dasharray="4,2" marker-end="url(#arr-m)" />
+          </g>
+        </svg>
+      </div>
+
+      <div class="card">
+        <div class="card-hdr">
+          <span id="lbl-front-title">MẶT CẮT DỌC (Thanh ray tại HOME + SVM)</span>
+          <span class="mono">Cao 25–30 cm</span>
+        </div>
+        <svg viewBox="0 0 420 270">
+          <line x1="12" y1="242" x2="408" y2="242" stroke="#64748b" stroke-width="1.6" />
+          <rect x="76" y="140" width="150" height="102" rx="4" fill="#1e293b" stroke="#64748b" stroke-width="1.1" opacity="0.45" />
+          <rect x="24" y="168" width="220" height="10" rx="1.5" fill="#78350f" fill-opacity="0.72" stroke="#d97706" stroke-width="1.5" />
+          <line x1="36" y1="178" x2="36" y2="242" stroke="#64748b" stroke-width="2" />
+          <line x1="232" y1="178" x2="232" y2="242" stroke="#64748b" stroke-width="2" />
+
+          <rect x="246" y="168" width="152" height="12" rx="2" fill="#166534" fill-opacity="0.82" stroke="#22c55e" stroke-width="1.4" />
+          <line x1="258" y1="180" x2="258" y2="242" stroke="#64748b" stroke-width="2" />
+          <line x1="384" y1="180" x2="384" y2="242" stroke="#64748b" stroke-width="2" />
+          <text x="328" y="200" text-anchor="middle" fill="#86efac" font-size="7.8">Băng tải cấp phôi</text>
+
+          <rect x="254" y="156" width="12" height="12" rx="1" fill="#f97316" stroke="#fff7ed" stroke-width="1" />
+          <rect x="270" y="156" width="12" height="12" rx="2" fill="#22c55e" stroke="#f0fdf4" stroke-width="1" />
+          <line x1="184" y1="226" x2="244" y2="226" stroke="#38bdf8" stroke-width="1" marker-start="url(#dim-arr)" marker-end="url(#dim-arr)" />
+          <text x="214" y="237" text-anchor="middle" fill="#7dd3fc" font-size="7.4" font-weight="600">~30 cm trống</text>
+
+          <rect x="132" y="164" width="30" height="4" fill="#eab308" />
+          <rect x="30" y="164" width="94" height="4" fill="#38bdf8" />
+          <text x="147" y="198" text-anchor="middle" fill="#fdba74" font-size="7.2" font-weight="600">Ô 2×2</text>
+          <text x="77" y="198" text-anchor="middle" fill="#7dd3fc" font-size="7.2" font-weight="600">Vùng Trống Manual</text>
+
+          <rect id="front-rail-base" x="177" y="163" width="14" height="5" fill="#e2e8f0" />
+          <g id="front-obs" transform="translate(184, 0)">
+            <rect x="-10" y="108" width="20" height="55" rx="2" fill="#facc15" fill-opacity="0.92" stroke="#713f12" stroke-width="1.4" />
+            <text x="0" y="99" text-anchor="middle" fill="#fde047" font-size="7.2" font-weight="600">Trụ Vàng Ø10×25–30cm</text>
+          </g>
+
+          <rect x="173" y="130" width="22" height="10" rx="1.5" fill="#0f172a" stroke="#3b82f6" stroke-width="1.3" />
+          <path d="M184,130 L184,64 L152,64" fill="none" stroke="#38bdf8" stroke-width="6" stroke-linecap="round" />
+          <circle cx="184" cy="64" r="5" fill="#0f172a" stroke="#38bdf8" stroke-width="1.3" />
+          <circle cx="152" cy="64" r="4.5" fill="#0f172a" stroke="#38bdf8" stroke-width="1.3" />
+          <rect x="142" y="70" width="20" height="7" rx="1" fill="#e2e8f0" stroke="#3b82f6" stroke-width="1" />
+          <rect x="145" y="77" width="14" height="7" rx="1" fill="#475569" />
+          <path d="M152,84 L152,91 M147,91 L147,98 M157,91 L157,98" stroke="#f59e0b" stroke-width="1.7" stroke-linecap="round" />
+
+          <path id="front-arc-auto" d="M 262 152 Q 204 42 147 156" fill="none" stroke="#f97316" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arr-o)" />
+          <path id="front-arc-manual" d="M 266 152 Q 178 36 86 156" fill="none" stroke="#38bdf8" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arr-m)" style="display:none;" />
+
+          <rect x="18" y="14" width="174" height="36" rx="4" fill="#1e293b" stroke="#475569" stroke-width="1" />
+          <text x="25" y="28" fill="#f8fafc" font-size="7.6" font-weight="600">Module SVM: 92×132×25.6 mm</text>
+          <text x="25" y="40" fill="#38bdf8" font-size="7.2" font-family="monospace">Khối lượng 348g (+25.6mm TCP)</text>
+        </svg>
+      </div>
+    </div>
+
+    <div class="specs">
+      <h2>Thông Số Kỹ Thuật Đã Chốt Cho Cả 2 Phiên Bản</h2>
+      <div class="spec-grid">
+        <div class="spec-item">
+          <b>1. Mặt bàn gỗ &amp; Băng tải</b><br />
+          • Tấm gỗ: <b>110 cm × 40 cm</b> (mép phải giáp băng tải xanh).<br />
+          • Khoảng cách từ trục HOME (ray) → đầu băng tải: <b>~30 cm</b>.<br />
+          • Vùng quét nhỏ đầu băng tải: <b>~18 × 26 cm</b>.
+        </div>
+        <div class="spec-item">
+          <b>2. Phôi gắp &amp; Vùng đặt</b><br />
+          • Vuông cam: <b>6 × 6 × 6 cm</b> · Trụ xanh lá: <b>Ø6 × 6 cm</b>.<br />
+          • Ô 2×2 Auto: <b>15 × 15 cm</b> (7.5 × 7.5 cm/ô) đặt khít phôi.<br />
+          • Vùng Trống bên trái: dùng cho chế độ <b>Manual 1 lần/bấm</b>.
+        </div>
+        <div class="spec-item">
+          <b>3. Vật cản Vàng &amp; Module SVM</b><br />
+          • Trụ Vàng: <b>Ø10 cm, cao 25–30 cm</b>.<br />
+          • Bản 1 (Mặc định): chạy trên thanh ray 40 cm tại HOME.<br />
+          • Bản 2 (Động): bỏ ray, quay Tròn / chạy Zigzag ở vùng 30 cm.<br />
+          • Doosan SVM cổ tay: <b>92 × 132 × 25.6 mm (348 g)</b>.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const btnV1 = document.getElementById('btn-v1');
+    const btnV2C = document.getElementById('btn-v2-circle');
+    const btnV2Z = document.getElementById('btn-v2-zigzag');
+    const btnPick = document.getElementById('btn-pick-mode');
+    const chkReach = document.getElementById('chk-reach');
+    const reachCircle = document.getElementById('reach-circle');
+
+    const v1Rail = document.getElementById('v1-rail');
+    const frontRailBase = document.getElementById('front-rail-base');
+    const v2CirclePath = document.getElementById('v2-circle-path');
+    const v2ZigzagPath = document.getElementById('v2-zigzag-path');
+    const topObs = document.getElementById('top-obs');
+    const frontObs = document.getElementById('front-obs');
+    const lblTop = document.getElementById('lbl-top-title');
+    const lblFront = document.getElementById('lbl-front-title');
+    const summaryTxt = document.getElementById('summary-txt');
+
+    const pathsAuto = document.getElementById('paths-auto');
+    const pathsManual = document.getElementById('paths-manual');
+    const frontArcAuto = document.getElementById('front-arc-auto');
+    const frontArcManual = document.getElementById('front-arc-manual');
+    const zone2x2 = document.getElementById('zone-2x2');
+    const zoneMan = document.getElementById('zone-manual');
+
+    let scenario = 'v1';
+    let isAuto = true;
+    let phase = 0;
+
+    function setScenario(next) {
+      scenario = next;
+      btnV1.className = next === 'v1' ? 'active' : '';
+      btnV2C.className = next === 'v2c' ? 'active' : '';
+      btnV2Z.className = next === 'v2z' ? 'active' : '';
+      v1Rail.style.display = next === 'v1' ? 'inline' : 'none';
+      frontRailBase.style.display = next === 'v1' ? 'inline' : 'none';
+      v2CirclePath.style.display = next === 'v2c' ? 'inline' : 'none';
+      v2ZigzagPath.style.display = next === 'v2z' ? 'inline' : 'none';
+      if (next === 'v1') {
+        lblTop.textContent = 'BẢN 1 — MẶT BẰNG THANH RAY (Mặc định)';
+        lblFront.textContent = 'MẶT CẮT DỌC (Thanh ray tại HOME + SVM)';
+        summaryTxt.textContent = 'Bản 1 (Mặc định): Thanh ray đặt ngay trục HOME, cách băng tải 30 cm; Trụ Vàng chạy trên ray 40 cm.';
+      } else if (next === 'v2c') {
+        lblTop.textContent = 'BẢN 2A — BỎ RAY, VẬT ĐỘNG QUAY TRÒN (Vùng 30 cm)';
+        lblFront.textContent = 'MẶT CẮT DỌC (Vật động Tròn vùng giữa + SVM)';
+        summaryTxt.textContent = 'Bản 2A (Tròn): Bỏ thanh ray, dùng cùng khung bàn; Trụ Vàng quay tròn trong vùng 30 cm giữa HOME và băng tải.';
+      } else {
+        lblTop.textContent = 'BẢN 2B — BỎ RAY, VẬT ĐỘNG ZIGZAG (Vùng 30 cm)';
+        lblFront.textContent = 'MẶT CẮT DỌC (Vật động Zigzag vùng giữa + SVM)';
+        summaryTxt.textContent = 'Bản 2B (Zigzag): Bỏ thanh ray, dùng cùng khung bàn; Trụ Vàng chạy Zigzag qua lại trong vùng 30 cm giữa HOME và băng tải.';
+      }
+    }
+
+    btnV1.addEventListener('click', () => setScenario('v1'));
+    btnV2C.addEventListener('click', () => setScenario('v2c'));
+    btnV2Z.addEventListener('click', () => setScenario('v2z'));
+    btnPick.addEventListener('click', () => {
+      isAuto = !isAuto;
+      btnPick.textContent = isAuto ? 'Chế độ: Auto (Ô 2×2)' : 'Chế độ: Manual (Vùng Trống)';
+      pathsAuto.style.display = isAuto ? 'inline' : 'none';
+      pathsManual.style.display = isAuto ? 'none' : 'inline';
+      frontArcAuto.style.display = isAuto ? 'inline' : 'none';
+      frontArcManual.style.display = isAuto ? 'none' : 'inline';
+      zone2x2.setAttribute('opacity', isAuto ? '1' : '0.35');
+      zoneMan.setAttribute('opacity', isAuto ? '0.45' : '1');
+    });
+    chkReach.addEventListener('change', () => {
+      reachCircle.style.display = chkReach.checked ? 'inline' : 'none';
+    });
+
+    function tick() {
+      phase += 0.04;
+      let ox = 184, oy = 176;
+      if (scenario === 'v1') {
+        ox = 184;
+        oy = 176 + 26 * Math.sin(phase);
+      } else if (scenario === 'v2c') {
+        ox = 215 + 22 * Math.cos(phase);
+        oy = 176 + 22 * Math.sin(phase);
+      } else {
+        const u = (phase * 0.45) % 2;
+        const tri = u < 1 ? u : 2 - u;
+        oy = 148 + tri * 56;
+        ox = 215 + 19 * Math.sin(phase * 2.7);
+      }
+      topObs.setAttribute('transform', `translate(${ox.toFixed(1)}, ${oy.toFixed(1)})`);
+      frontObs.setAttribute('transform', `translate(${ox.toFixed(1)}, 0)`);
+      requestAnimationFrame(tick);
+    }
+    tick();
+  </script>
+</body>
+</html>

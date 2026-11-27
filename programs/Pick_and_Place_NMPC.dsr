@@ -1,0 +1,72 @@
+[
+  {
+    "id": 1,
+    "type": "MoveJ",
+    "target": "HOME_SAFE",
+    "params": "[0.0, 0.0, 1.5708, 0.0, 1.5708, 0.0]",
+    "desc": "V\u1ec1 \u0111i\u1ec3m Home an to\u00e0n"
+  },
+  {
+    "id": 2,
+    "type": "MoveNMPC",
+    "target": "Khay_Gap_A_Hover",
+    "params": "[0.45, -0.25, 0.22]",
+    "desc": "NMPC h\u1ea1 xu\u1ed1ng khay g\u1eafp A"
+  },
+  {
+    "id": 11,
+    "type": "MoveNMPC",
+    "target": "Recorded_Pt_11",
+    "params": "[0.471, -0.248, 0.022]",
+    "desc": "T\u1ecda \u0111\u1ed9 l\u01b0u tr\u1ef1c ti\u1ebfp t\u1eeb Jog"
+  },
+  {
+    "id": 4,
+    "type": "Gripper",
+    "target": "CLOSE_40MM",
+    "params": "40",
+    "desc": "K\u1eb9p ch\u1eb7t h\u1ed9p v\u00e0ng (Song song)"
+  },
+  {
+    "id": 5,
+    "type": "Wait",
+    "target": "DELAY",
+    "params": "0.8",
+    "desc": "Ch\u1edd k\u1eb9p \u1ed5n \u0111\u1ecbnh"
+  },
+  {
+    "id": 6,
+    "type": "MoveNMPC",
+    "target": "Lift_Clearance",
+    "params": "[0.45, -0.25, 0.36]",
+    "desc": "N\u00e2ng h\u1ed9p l\u00ean \u0111\u1ed9 cao an to\u00e0n"
+  },
+  {
+    "id": 8,
+    "type": "MoveNMPC",
+    "target": "Khay_Tha_B_Hover",
+    "params": "[0.45, 0.25, 0.22]",
+    "desc": "NMPC di chuy\u1ec3n t\u1edbi tr\u00ean khay B"
+  },
+  {
+    "id": 9,
+    "type": "MoveNMPC",
+    "target": "Khay_Tha_B_Down",
+    "params": "[0.45, 0.25, 0.055]",
+    "desc": "\u0110\u1eb7t h\u1ed9p xu\u1ed1ng khay xanh B"
+  },
+  {
+    "id": 10,
+    "type": "Gripper",
+    "target": "OPEN_85MM",
+    "params": "85",
+    "desc": "Nh\u1ea3 h\u1ed9p ra ho\u00e0n to\u00e0n"
+  },
+  {
+    "id": 11,
+    "type": "MoveJ",
+    "target": "HOME_SAFE",
+    "params": "[0.0, 0.0, 1.5708, 0.0, 1.5708, 0.0]",
+    "desc": "R\u00fat tay v\u1ec1 Home an to\u00e0n"
+  }
+]
