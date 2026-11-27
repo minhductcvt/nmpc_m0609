@@ -1776,8 +1776,8 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         self.vpp_auto_orange_idx = 0
         self.vpp_auto_green_idx = 0
         self.vpp_auto_slots = {
-            "orange_cube": [(0.390, 0.185, 0.028), (0.390, 0.305, 0.028)],
-            "green_cyl":   [(0.510, 0.185, 0.028), (0.510, 0.305, 0.028)],
+            "orange_cube": [(0.390, 0.185, 0.024), (0.390, 0.305, 0.024)],
+            "green_cyl":   [(0.510, 0.185, 0.024), (0.510, 0.305, 0.024)],
         }
         self.vpp_cycle_place_pose = None
         self.vpp_cycle_kind = None
@@ -5450,16 +5450,18 @@ class TeachPendantApp(QtWidgets.QMainWindow):
             cur_j6 = float(self.joint_angles[5]) if len(self.joint_angles) >= 6 else j6_pick
             j6_err = abs(((cur_j6 - j6_pick + math.pi) % (2.0 * math.pi)) - math.pi)
             self._vpp_set_phase_ui(f"3/8 Hạ thẳng xuống 1/2 chiều cao vật (Z={pick_z:.3f}m)...", 34, "#38BDF8")
-            if (dist_xy < 0.020 and dz_err < 0.012 and j6_err < 0.08) or elapsed > 4.0:
+            if dist_xy < 0.008 and dz_err < 0.007 and j6_err < 0.030:
                 self.vpp_settle_ts += 0.02
-                if self.vpp_settle_ts >= 0.30 or elapsed > 4.0:
-                    self.vpp_state = "GRASP_CLOSE"
-                    self.vpp_state_ts = now
-                    target_w, force_n, _ = self.vpp_latched_grasp
-                    self._vpp_set_phase_ui(
-                        f"4/8 Đóng kẹp Robotiq 2F-85 tới {target_w} mm (Lực: {force_n:.0f} N)...",
-                        44, "#FBBF24"
-                    )
+            else:
+                self.vpp_settle_ts = 0.0
+            if self.vpp_settle_ts >= 0.30 or elapsed > 4.5:
+                self.vpp_state = "GRASP_CLOSE"
+                self.vpp_state_ts = now
+                target_w, force_n, _ = self.vpp_latched_grasp
+                self._vpp_set_phase_ui(
+                    f"4/8 Đóng kẹp Robotiq 2F-85 tới {target_w} mm (Lực: {force_n:.0f} N)...",
+                    44, "#FBBF24"
+                )
 
         elif self.vpp_state == "GRASP_CLOSE":
             bx, by, pick_z, _, j6_pick, _ = self.vpp_latched_box
@@ -5515,29 +5517,32 @@ class TeachPendantApp(QtWidgets.QMainWindow):
         elif self.vpp_state == "DESCEND_PLACE":
             px, py, pz, _ = (self.vpp_cycle_place_pose or self.place_pose_taught)
             j6_pl = self._vpp_target_place_j6(self.vpp_latched_box[4])
-            target_pz = max(0.026, pz)
+            target_pz = max(0.023, pz)
             self.desired_j6_rad = j6_pl
             self.ros.publish_target(px, py, target_pz, yaw=j6_pl)
-            dist = math.hypot(math.hypot(self.tcp_pos[0] - px, self.tcp_pos[1] - py), self.tcp_pos[2] - target_pz)
+            dist_xy = math.hypot(self.tcp_pos[0] - px, self.tcp_pos[1] - py)
+            dz_err = abs(self.tcp_pos[2] - target_pz)
             cur_j6 = float(self.joint_angles[5]) if len(self.joint_angles) >= 6 else j6_pl
             j6_err = abs(((cur_j6 - j6_pl + math.pi) % (2.0 * math.pi)) - math.pi)
             self._vpp_set_phase_ui(
-                f"7/8 Hạ & xoay khớp J6={math.degrees(j6_pl):+.1f}° đặt đúng vào ô...",
+                f"7/8 Hạ & căn khít ô [J6={math.degrees(j6_pl):+.1f}° | sai số {dist_xy*1000:.1f}mm]...",
                 84, "#38BDF8"
             )
-            if (dist < 0.022 and j6_err < 0.045) or elapsed > 4.0:
+            if dist_xy < 0.007 and dz_err < 0.007 and j6_err < 0.025:
                 self.vpp_settle_ts += 0.02
-                if self.vpp_settle_ts >= 0.25 or elapsed > 4.0:
-                    self.vpp_state = "RELEASE_OPEN"
-                    self.vpp_state_ts = now
-                    self._quick_gripper_set(85)
-                    self._vpp_set_phase_ui("7/8 Mở kẹp thả vật...", 90, "#FBBF24")
+            else:
+                self.vpp_settle_ts = 0.0
+            if self.vpp_settle_ts >= 0.35 or elapsed > 5.0:
+                self.vpp_state = "RELEASE_OPEN"
+                self.vpp_state_ts = now
+                self._quick_gripper_set(85)
+                self._vpp_set_phase_ui("7/8 Mở kẹp thả vật khít ô...", 90, "#FBBF24")
 
         elif self.vpp_state == "RELEASE_OPEN":
             px, py, pz, _ = (self.vpp_cycle_place_pose or self.place_pose_taught)
             j6_pl = self._vpp_target_place_j6(self.vpp_latched_box[4])
-            self.ros.publish_target(px, py, max(0.030, pz), yaw=j6_pl)
-            if elapsed >= 0.85:
+            self.ros.publish_target(px, py, max(0.023, pz), yaw=j6_pl)
+            if elapsed >= 0.95:
                 self.vpp_state = "RETRACT_PLACE"
                 self.vpp_state_ts = now
                 self._vpp_set_phase_ui("8/8 Nhấc lên an toàn sau khi thả...", 95, "#38BDF8")

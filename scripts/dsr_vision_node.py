@@ -202,7 +202,10 @@ class Pose3DEstimator:
         z_bot = float(np.percentile(pts_base[:, 2], 2))
         height_m = float(np.clip(z_top - min(0.012, z_bot), 0.02, 0.30))
 
-        top_pts = pts_base[pts_base[:, 2] >= (z_top - 0.018)]
+        # Isolate purely the flat top surface (reject camera-facing vertical walls that pull centroid off-center)
+        top_pts = pts_base[pts_base[:, 2] >= (z_top - 0.007)]
+        if len(top_pts) < 12:
+            top_pts = pts_base[pts_base[:, 2] >= (z_top - 0.014)]
         if len(top_pts) < 8:
             top_pts = pts_base
 
@@ -217,9 +220,12 @@ class Pose3DEstimator:
         if len(top_pts) >= 12:
             xy_mm = (top_pts[:, :2] * 1000.0).astype(np.float32)
             rect = cv2.minAreaRect(xy_mm)
-            angle_deg = rect[2]
-            w_rect, h_rect = rect[1]
+            (cx_mm, cy_mm), (w_rect, h_rect), angle_deg = rect
             if w_rect > 5.0 and h_rect > 5.0:
+                # Use fitted rectangle geometric center when reasonably tight to eliminate oblique perspective skew
+                rx_m, ry_m = float(cx_mm) / 1000.0, float(cy_mm) / 1000.0
+                if math.hypot(rx_m - x_c, ry_m - y_c) < 0.018:
+                    x_c, y_c = rx_m, ry_m
                 # Map rect dimensions consistently to (width, depth)
                 depth_m = float(np.clip(max(w_rect, h_rect) / 1000.0, 0.02, 0.30))
                 width_m = float(np.clip(min(w_rect, h_rect) / 1000.0, 0.02, 0.30))
